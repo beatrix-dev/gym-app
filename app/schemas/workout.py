@@ -130,3 +130,16 @@ class WorkoutSessionOut(BaseModel):
     ended_at: datetime | None = None
     notes: str | None = None
     sets: list[SessionSetOut] = []
+
+
+class PlanExerciseRecommendationOut(BaseModel):
+    plan_exercise_id: int
+    exercise_id: int
+    target_reps_min: int | None = None
+    target_reps_max: int | None = None
+    last_session_id: int | None = None
+    last_weight_kg: float | None = None
+    last_reps: int | None = None
+    last_rpe: float | None = None
+    suggested_weight_kg: float | None = None
+    rationale: str

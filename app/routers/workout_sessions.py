@@ -7,7 +7,7 @@ from app.core.database import get_db
 from app.core.deps import get_current_user
 from app.models.exercise import Exercise
 from app.models.user import User
-from app.models.workout import SessionSet, WorkoutPlanDay, WorkoutSession
+from app.models.workout import SessionSet, WorkoutPlan, WorkoutPlanDay, WorkoutSession
 from app.schemas.workout import (
     SessionSetCreate,
     SessionSetOut,
@@ -41,8 +41,15 @@ def start_session(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    if payload.plan_day_id is not None and db.get(WorkoutPlanDay, payload.plan_day_id) is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plan day not found")
+    if payload.plan_day_id is not None:
+        owned_day = (
+            db.query(WorkoutPlanDay)
+            .join(WorkoutPlan, WorkoutPlanDay.plan_id == WorkoutPlan.id)
+            .filter(WorkoutPlanDay.id == payload.plan_day_id, WorkoutPlan.user_id == current_user.id)
+            .first()
+        )
+        if owned_day is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plan day not found")
 
     started_at = payload.started_at or datetime.now(timezone.utc)
     if started_at.tzinfo is not None:

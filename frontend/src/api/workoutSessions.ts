@@ -6,8 +6,14 @@ export async function listSessions(): Promise<WorkoutSession[]> {
   return data
 }
 
-export async function startSession(notes?: string): Promise<WorkoutSession> {
-  const { data } = await apiClient.post<WorkoutSession>('/workout-sessions', { notes })
+export async function startSession(
+  planDayId?: number | null,
+  notes?: string,
+): Promise<WorkoutSession> {
+  const { data } = await apiClient.post<WorkoutSession>('/workout-sessions', {
+    plan_day_id: planDayId ?? null,
+    notes,
+  })
   return data
 }
 

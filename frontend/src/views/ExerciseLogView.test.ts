@@ -3,10 +3,12 @@ import { mount, flushPromises } from '@vue/test-utils'
 import ExerciseLogView from './ExerciseLogView.vue'
 import * as exercisesApi from '@/api/exercises'
 import * as sessionsApi from '@/api/workoutSessions'
-import type { Exercise, WorkoutSession } from '@/types'
+import * as plansApi from '@/api/workoutPlans'
+import type { Exercise, PlanExerciseRecommendation, WorkoutPlan, WorkoutSession } from '@/types'
 
 vi.mock('@/api/exercises')
 vi.mock('@/api/workoutSessions')
+vi.mock('@/api/workoutPlans')
 
 const exercises: Exercise[] = [
   {
@@ -31,9 +33,30 @@ const activeSession: WorkoutSession = {
   sets: [],
 }
 
+const planWithDay: WorkoutPlan = {
+  id: 1,
+  user_id: 1,
+  name: 'Push Pull Legs',
+  description: null,
+  is_active: true,
+  is_public: false,
+  forked_from_plan_id: null,
+  created_at: '2026-07-01T00:00:00Z',
+  days: [
+    {
+      id: 5,
+      plan_id: 1,
+      day_order: 1,
+      label: 'Push Day',
+      plan_exercises: [],
+    },
+  ],
+}
+
 describe('ExerciseLogView', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.mocked(plansApi.listPlans).mockResolvedValue([])
   })
 
   it('shows a start-workout prompt when there is no active session', async () => {
@@ -166,5 +189,59 @@ describe('ExerciseLogView', () => {
 
     expect(sessionsApi.finishSession).toHaveBeenCalledWith(10)
     expect(wrapper.text()).toContain('No workout in progress.')
+  })
+
+  it('starts a session against a plan day when one is picked', async () => {
+    vi.mocked(exercisesApi.listExercises).mockResolvedValue(exercises)
+    vi.mocked(sessionsApi.listSessions).mockResolvedValue([])
+    vi.mocked(plansApi.listPlans).mockResolvedValue([planWithDay])
+    vi.mocked(sessionsApi.startSession).mockResolvedValue({ ...activeSession, plan_day_id: 5 })
+    vi.mocked(plansApi.getDayRecommendations).mockResolvedValue([])
+
+    const wrapper = mount(ExerciseLogView)
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Push Pull Legs — Push Day')
+    await wrapper.find('select').setValue('5')
+    await wrapper.find('button').trigger('click')
+    await flushPromises()
+
+    expect(sessionsApi.startSession).toHaveBeenCalledWith(5)
+    expect(plansApi.getDayRecommendations).toHaveBeenCalledWith(1, 5)
+  })
+
+  it('shows a suggested weight for a matching exercise and can apply it', async () => {
+    const planLinkedSession: WorkoutSession = { ...activeSession, plan_day_id: 5 }
+    const recommendation: PlanExerciseRecommendation = {
+      plan_exercise_id: 1,
+      exercise_id: 1,
+      target_reps_min: 8,
+      target_reps_max: 10,
+      last_session_id: 9,
+      last_weight_kg: 60,
+      last_reps: 10,
+      last_rpe: 7,
+      suggested_weight_kg: 62.5,
+      rationale: 'Hit top of rep range comfortably — add 2.5kg.',
+    }
+    vi.mocked(exercisesApi.listExercises).mockResolvedValue(exercises)
+    vi.mocked(sessionsApi.listSessions).mockResolvedValue([planLinkedSession])
+    vi.mocked(plansApi.listPlans).mockResolvedValue([planWithDay])
+    vi.mocked(plansApi.getDayRecommendations).mockResolvedValue([recommendation])
+
+    const wrapper = mount(ExerciseLogView)
+    await flushPromises()
+
+    expect(wrapper.text()).not.toContain('Suggested:')
+
+    await wrapper.find('select').setValue('1')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Suggested:')
+    expect(wrapper.text()).toContain('62.5kg')
+
+    await wrapper.find('button.text-accent-600').trigger('click')
+    const weightInput = wrapper.find('input[type="number"]')
+    expect((weightInput.element as HTMLInputElement).value).toBe('62.5')
   })
 })

@@ -27,6 +27,11 @@ const router = createRouter({
       name: 'personal-records',
       component: () => import('@/views/PersonalRecordsView.vue'),
     },
+    {
+      path: '/planner',
+      name: 'planner',
+      component: () => import('@/views/PlannerView.vue'),
+    },
   ],
 })
 
