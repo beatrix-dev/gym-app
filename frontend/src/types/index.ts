@@ -67,3 +67,65 @@ export interface WorkoutSession {
   notes: string | null
   sets: SessionSet[]
 }
+
+export interface WorkoutPlanExercise {
+  id: number
+  plan_day_id: number
+  exercise_order: number | null
+  target_sets: number | null
+  target_reps_min: number | null
+  target_reps_max: number | null
+  exercise: Exercise
+}
+
+export interface WorkoutPlanExerciseCreate {
+  exercise_id: number
+  exercise_order?: number | null
+  target_sets?: number | null
+  target_reps_min?: number | null
+  target_reps_max?: number | null
+}
+
+export interface WorkoutPlanDay {
+  id: number
+  plan_id: number
+  day_order: number
+  label: string | null
+  plan_exercises: WorkoutPlanExercise[]
+}
+
+export interface WorkoutPlanDayCreate {
+  day_order: number
+  label?: string | null
+}
+
+export interface WorkoutPlan {
+  id: number
+  user_id: number
+  name: string | null
+  description: string | null
+  is_active: boolean
+  is_public: boolean
+  forked_from_plan_id: number | null
+  created_at: string
+  days: WorkoutPlanDay[]
+}
+
+export interface WorkoutPlanCreate {
+  name?: string | null
+  description?: string | null
+  is_public?: boolean
+}
+
+export interface PlanExerciseRecommendation {
+  plan_exercise_id: number
+  exercise_id: number
+  target_reps_min: number | null
+  target_reps_max: number | null
+  last_session_id: number | null
+  last_weight_kg: number | null
+  last_reps: number | null
+  last_rpe: number | null
+  suggested_weight_kg: number | null
+  rationale: string
+}

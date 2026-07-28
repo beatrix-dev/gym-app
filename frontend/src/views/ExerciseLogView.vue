@@ -2,13 +2,18 @@
 import { computed, onMounted, ref } from 'vue'
 import { listExercises } from '@/api/exercises'
 import { deleteSet, finishSession, listSessions, logSet, startSession } from '@/api/workoutSessions'
-import type { Exercise, WorkoutSession } from '@/types'
+import { getDayRecommendations, listPlans } from '@/api/workoutPlans'
+import type { Exercise, PlanExerciseRecommendation, WorkoutPlan, WorkoutSession } from '@/types'
 
 const exercises = ref<Exercise[]>([])
+const plans = ref<WorkoutPlan[]>([])
 const currentSession = ref<WorkoutSession | null>(null)
 const isLoading = ref(true)
 const isStartingSession = ref(false)
 const error = ref('')
+
+const selectedPlanDayId = ref<number | null>(null)
+const recommendations = ref<Map<number, PlanExerciseRecommendation>>(new Map())
 
 const exerciseId = ref<number | null>(null)
 const weightKg = ref<number | null>(null)
@@ -21,13 +26,53 @@ const exerciseName = (id: number) => exercises.value.find((e) => e.id === id)?.n
 
 const sortedSets = computed(() => currentSession.value?.sets ?? [])
 
+const planDayOptions = computed(() =>
+  plans.value.flatMap((p) =>
+    p.days.map((d) => ({
+      id: d.id,
+      label: `${p.name || 'Untitled plan'} — ${d.label || `Day ${d.day_order}`}`,
+    })),
+  ),
+)
+
+const activeRecommendation = computed(() =>
+  exerciseId.value !== null ? (recommendations.value.get(exerciseId.value) ?? null) : null,
+)
+
+function planIdForDay(dayId: number): number | null {
+  return plans.value.find((p) => p.days.some((d) => d.id === dayId))?.id ?? null
+}
+
+async function loadRecommendationsForSession() {
+  const dayId = currentSession.value?.plan_day_id
+  if (!dayId) {
+    recommendations.value = new Map()
+    return
+  }
+  const planId = planIdForDay(dayId)
+  if (!planId) return
+  try {
+    const recs = await getDayRecommendations(planId, dayId)
+    recommendations.value = new Map(recs.map((r) => [r.exercise_id, r]))
+  } catch {
+    // Non-fatal: logging still works without suggestions.
+  }
+}
+
+function useSuggestedWeight() {
+  if (activeRecommendation.value?.suggested_weight_kg != null) {
+    weightKg.value = activeRecommendation.value.suggested_weight_kg
+  }
+}
+
 async function loadInitialData() {
   isLoading.value = true
   error.value = ''
   try {
-    exercises.value = await listExercises()
+    ;[exercises.value, plans.value] = await Promise.all([listExercises(), listPlans()])
     const sessions = await listSessions()
     currentSession.value = sessions.find((s) => s.ended_at === null) ?? null
+    await loadRecommendationsForSession()
   } catch {
     error.value = 'Failed to load data. Is the backend running?'
   } finally {
@@ -39,7 +84,9 @@ async function handleStartSession() {
   isStartingSession.value = true
   error.value = ''
   try {
-    currentSession.value = await startSession()
+    currentSession.value = await startSession(selectedPlanDayId.value)
+    selectedPlanDayId.value = null
+    await loadRecommendationsForSession()
   } catch {
     error.value = 'Failed to start a workout session.'
   } finally {
@@ -88,6 +135,7 @@ async function handleFinishSession() {
   try {
     currentSession.value = await finishSession(currentSession.value.id)
     currentSession.value = null
+    recommendations.value = new Map()
   } catch {
     error.value = 'Failed to finish session.'
   }
@@ -106,6 +154,19 @@ onMounted(loadInitialData)
 
     <div v-else-if="!currentSession" class="flex flex-col items-start gap-3">
       <p class="text-sm text-slate-600">No workout in progress.</p>
+      <label
+        v-if="planDayOptions.length > 0"
+        class="flex flex-col gap-1 text-sm font-medium text-slate-700"
+      >
+        Plan day (optional)
+        <select
+          v-model="selectedPlanDayId"
+          class="rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-accent-600 focus:outline-none focus:ring-2 focus:ring-accent-600"
+        >
+          <option :value="null">No plan</option>
+          <option v-for="opt in planDayOptions" :key="opt.id" :value="opt.id">{{ opt.label }}</option>
+        </select>
+      </label>
       <button
         :disabled="isStartingSession"
         class="rounded-md bg-accent-600 px-3 py-2 text-sm font-medium text-white hover:bg-accent-700 disabled:opacity-50"
@@ -131,6 +192,18 @@ onMounted(loadInitialData)
             <option v-for="ex in exercises" :key="ex.id" :value="ex.id">{{ ex.name }}</option>
           </select>
         </label>
+
+        <p
+          v-if="activeRecommendation && activeRecommendation.suggested_weight_kg !== null"
+          class="text-xs text-slate-600"
+        >
+          Suggested:
+          <span class="font-medium text-accent-700">{{ activeRecommendation.suggested_weight_kg }}kg</span>
+          — {{ activeRecommendation.rationale }}
+          <button type="button" class="text-accent-600 hover:underline" @click="useSuggestedWeight">
+            Use
+          </button>
+        </p>
 
         <div class="grid grid-cols-3 gap-3">
           <label class="flex flex-col gap-1 text-sm font-medium text-slate-700">
