@@ -1,0 +1,14 @@
+@import "tailwindcss";
+
+@theme {
+  --color-accent-50: #eff6ff;
+  --color-accent-100: #dbeafe;
+  --color-accent-600: #2563eb;
+  --color-accent-700: #1d4ed8;
+  --color-success: #16a34a;
+  --color-error: #dc2626;
+}
+
+body {
+  @apply bg-slate-50;
+}
