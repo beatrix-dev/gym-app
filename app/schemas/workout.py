@@ -2,6 +2,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict
 
+from app.models.workout import DayOfWeek
 from app.schemas.exercise import ExerciseOut
 
 
@@ -35,11 +36,13 @@ class WorkoutPlanExerciseOut(BaseModel):
 class WorkoutPlanDayCreate(BaseModel):
     day_order: int
     label: str | None = None
+    day_of_week: DayOfWeek | None = None
 
 
 class WorkoutPlanDayUpdate(BaseModel):
     day_order: int | None = None
     label: str | None = None
+    day_of_week: DayOfWeek | None = None
 
 
 class WorkoutPlanDayOut(BaseModel):
@@ -49,6 +52,7 @@ class WorkoutPlanDayOut(BaseModel):
     plan_id: int
     day_order: int
     label: str | None = None
+    day_of_week: DayOfWeek | None = None
     plan_exercises: list[WorkoutPlanExerciseOut] = []
 
 

@@ -11,6 +11,15 @@ export type Equipment = 'barbell' | 'dumbbell' | 'machine' | 'cable' | 'bodyweig
 
 export type ExerciseCategory = 'compound' | 'isolation'
 
+export type DayOfWeek =
+  | 'monday'
+  | 'tuesday'
+  | 'wednesday'
+  | 'thursday'
+  | 'friday'
+  | 'saturday'
+  | 'sunday'
+
 export interface User {
   id: number
   email: string
@@ -92,12 +101,14 @@ export interface WorkoutPlanDay {
   plan_id: number
   day_order: number
   label: string | null
+  day_of_week: DayOfWeek | null
   plan_exercises: WorkoutPlanExercise[]
 }
 
 export interface WorkoutPlanDayCreate {
   day_order: number
   label?: string | null
+  day_of_week?: DayOfWeek | null
 }
 
 export interface WorkoutPlan {

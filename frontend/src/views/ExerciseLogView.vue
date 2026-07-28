@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import ExercisePicker from '@/components/ExercisePicker.vue'
 import { listExercises } from '@/api/exercises'
 import { deleteSet, finishSession, listSessions, logSet, startSession } from '@/api/workoutSessions'
 import { getDayRecommendations, listPlans } from '@/api/workoutPlans'
@@ -181,17 +182,7 @@ onMounted(loadInitialData)
         class="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
         @submit.prevent="handleLogSet"
       >
-        <label class="flex flex-col gap-1 text-sm font-medium text-slate-700">
-          Exercise
-          <select
-            v-model="exerciseId"
-            required
-            class="rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-accent-600 focus:outline-none focus:ring-2 focus:ring-accent-600"
-          >
-            <option :value="null" disabled>Select an exercise</option>
-            <option v-for="ex in exercises" :key="ex.id" :value="ex.id">{{ ex.name }}</option>
-          </select>
-        </label>
+        <ExercisePicker v-model="exerciseId" :exercises="exercises" />
 
         <p
           v-if="activeRecommendation && activeRecommendation.suggested_weight_kg !== null"

@@ -1,9 +1,12 @@
+import enum
+
 from sqlalchemy import (
     BigInteger,
     Boolean,
     Column,
     DateTime,
     DECIMAL,
+    Enum,
     ForeignKey,
     Index,
     SmallInteger,
@@ -15,6 +18,16 @@ from sqlalchemy import (
 from sqlalchemy.orm import relationship
 
 from app.core.database import Base
+
+
+class DayOfWeek(str, enum.Enum):
+    monday = "monday"
+    tuesday = "tuesday"
+    wednesday = "wednesday"
+    thursday = "thursday"
+    friday = "friday"
+    saturday = "saturday"
+    sunday = "sunday"
 
 
 class WorkoutPlan(Base):
@@ -47,6 +60,7 @@ class WorkoutPlanDay(Base):
     plan_id = Column(BigInteger, ForeignKey("workout_plans.id"), nullable=False)
     day_order = Column(SmallInteger, nullable=False)
     label = Column(String(100))
+    day_of_week = Column(Enum(DayOfWeek), nullable=True)
 
     plan = relationship("WorkoutPlan", back_populates="days")
     plan_exercises = relationship(

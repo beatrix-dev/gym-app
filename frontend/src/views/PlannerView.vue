@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import ExercisePicker from '@/components/ExercisePicker.vue'
 import { listExercises } from '@/api/exercises'
 import {
   addPlanExercise,
@@ -11,7 +12,48 @@ import {
   getDayRecommendations,
   listPlans,
 } from '@/api/workoutPlans'
-import type { Exercise, PlanExerciseRecommendation, WorkoutPlan, WorkoutPlanExercise } from '@/types'
+import type {
+  DayOfWeek,
+  Exercise,
+  PlanExerciseRecommendation,
+  WorkoutPlan,
+  WorkoutPlanExercise,
+} from '@/types'
+
+const WEEKDAYS: DayOfWeek[] = [
+  'monday',
+  'tuesday',
+  'wednesday',
+  'thursday',
+  'friday',
+  'saturday',
+  'sunday',
+]
+
+const WEEKDAY_LABELS: Record<DayOfWeek, string> = {
+  monday: 'Mon',
+  tuesday: 'Tue',
+  wednesday: 'Wed',
+  thursday: 'Thu',
+  friday: 'Fri',
+  saturday: 'Sat',
+  sunday: 'Sun',
+}
+
+const SPLIT_PRESETS = [
+  'Push',
+  'Pull',
+  'Legs',
+  'Upper',
+  'Lower',
+  'Full Body',
+  'Chest',
+  'Back',
+  'Shoulders',
+  'Arms',
+  'Core',
+  'Rest Day',
+] as const
 
 const exercises = ref<Exercise[]>([])
 const plans = ref<WorkoutPlan[]>([])
@@ -26,7 +68,9 @@ const isLoadingRecommendations = ref(false)
 const newPlanName = ref('')
 const isCreatingPlan = ref(false)
 
-const newDayLabel = ref('')
+const newDayPreset = ref<(typeof SPLIT_PRESETS)[number] | 'Custom' | ''>('')
+const newDayCustomLabel = ref('')
+const newDayWeekday = ref<DayOfWeek | ''>('')
 const isCreatingDay = ref(false)
 
 const newExerciseId = ref<number | null>(null)
@@ -38,6 +82,23 @@ const isAddingExercise = ref(false)
 const selectedPlan = computed(() => plans.value.find((p) => p.id === selectedPlanId.value) ?? null)
 const selectedDay = computed(
   () => selectedPlan.value?.days.find((d) => d.id === selectedDayId.value) ?? null,
+)
+
+const claimedWeekdays = computed(
+  () =>
+    new Set(
+      (selectedPlan.value?.days ?? [])
+        .map((d) => d.day_of_week)
+        .filter((d): d is DayOfWeek => d !== null),
+    ),
+)
+
+function dayForWeekday(wd: DayOfWeek) {
+  return selectedPlan.value?.days.find((d) => d.day_of_week === wd) ?? null
+}
+
+const unscheduledDays = computed(
+  () => (selectedPlan.value?.days ?? []).filter((d) => d.day_of_week === null),
 )
 
 function formatRepRange(pe: WorkoutPlanExercise) {
@@ -119,17 +180,21 @@ async function handleDeletePlan(planId: number) {
 }
 
 async function handleCreateDay() {
-  if (!selectedPlan.value || !newDayLabel.value.trim()) return
+  const label = newDayPreset.value === 'Custom' ? newDayCustomLabel.value.trim() : newDayPreset.value
+  if (!selectedPlan.value || !label) return
   isCreatingDay.value = true
   error.value = ''
   try {
     const nextOrder = selectedPlan.value.days.length + 1
     const day = await createPlanDay(selectedPlan.value.id, {
       day_order: nextOrder,
-      label: newDayLabel.value.trim(),
+      label,
+      day_of_week: newDayWeekday.value || null,
     })
     selectedPlan.value.days.push(day)
-    newDayLabel.value = ''
+    newDayPreset.value = ''
+    newDayCustomLabel.value = ''
+    newDayWeekday.value = ''
     selectDay(day.id)
   } catch {
     error.value = 'Failed to create day.'
@@ -251,33 +316,101 @@ onMounted(loadInitialData)
         <p v-if="selectedPlan.days.length === 0" class="text-sm text-slate-500">
           No days yet — add one below.
         </p>
-        <ul v-else class="flex flex-col gap-2">
-          <li
-            v-for="day in selectedPlan.days"
-            :key="day.id"
-            class="flex cursor-pointer items-center justify-between rounded-xl border px-4 py-3 text-sm shadow-sm"
-            :class="
-              day.id === selectedDayId
-                ? 'border-accent-600 bg-accent-50'
-                : 'border-slate-200 bg-white hover:bg-slate-50'
-            "
-            @click="selectDay(day.id)"
-          >
-            <span class="font-medium text-slate-900">{{ day.label || `Day ${day.day_order}` }}</span>
-            <button class="text-xs text-error hover:opacity-80" @click.stop="handleDeleteDay(day.id)">
-              Remove
-            </button>
-          </li>
-        </ul>
 
-        <form class="flex gap-2" @submit.prevent="handleCreateDay">
-          <input
-            v-model="newDayLabel"
-            type="text"
-            placeholder="New day label (e.g. Push Day)"
-            required
-            class="flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-accent-600 focus:outline-none focus:ring-2 focus:ring-accent-600"
-          />
+        <template v-else>
+          <div class="flex gap-2 overflow-x-auto pb-2">
+            <div v-for="wd in WEEKDAYS" :key="wd" class="flex w-32 flex-shrink-0 flex-col gap-1">
+              <p class="text-xs font-semibold uppercase text-slate-500">{{ WEEKDAY_LABELS[wd] }}</p>
+              <button
+                v-if="dayForWeekday(wd)"
+                type="button"
+                class="rounded-xl border px-3 py-2 text-left text-sm shadow-sm"
+                :class="
+                  dayForWeekday(wd)!.id === selectedDayId
+                    ? 'border-accent-600 bg-accent-50'
+                    : 'border-slate-200 bg-white hover:bg-slate-50'
+                "
+                @click="selectDay(dayForWeekday(wd)!.id)"
+              >
+                <span class="block font-medium text-slate-900">
+                  {{ dayForWeekday(wd)!.label || `Day ${dayForWeekday(wd)!.day_order}` }}
+                </span>
+                <span class="text-xs text-slate-500">
+                  {{ dayForWeekday(wd)!.plan_exercises.length }} exercises
+                </span>
+              </button>
+              <p
+                v-else
+                class="rounded-xl border border-dashed border-slate-200 px-3 py-4 text-center text-xs text-slate-400"
+              >
+                —
+              </p>
+            </div>
+          </div>
+
+          <div v-if="unscheduledDays.length > 0" class="flex flex-col gap-2">
+            <h3 class="text-xs font-semibold uppercase text-slate-500">Unscheduled</h3>
+            <ul class="flex flex-col gap-2">
+              <li
+                v-for="day in unscheduledDays"
+                :key="day.id"
+                class="flex cursor-pointer items-center justify-between rounded-xl border px-4 py-3 text-sm shadow-sm"
+                :class="
+                  day.id === selectedDayId
+                    ? 'border-accent-600 bg-accent-50'
+                    : 'border-slate-200 bg-white hover:bg-slate-50'
+                "
+                @click="selectDay(day.id)"
+              >
+                <span class="font-medium text-slate-900">{{ day.label || `Day ${day.day_order}` }}</span>
+                <button class="text-xs text-error hover:opacity-80" @click.stop="handleDeleteDay(day.id)">
+                  Remove
+                </button>
+              </li>
+            </ul>
+          </div>
+        </template>
+
+        <form
+          class="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:items-end"
+          @submit.prevent="handleCreateDay"
+        >
+          <label class="flex flex-1 flex-col gap-1 text-sm font-medium text-slate-700">
+            Split
+            <select
+              v-model="newDayPreset"
+              required
+              class="rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-accent-600 focus:outline-none focus:ring-2 focus:ring-accent-600"
+            >
+              <option value="" disabled>Choose a split</option>
+              <option v-for="preset in SPLIT_PRESETS" :key="preset" :value="preset">{{ preset }}</option>
+              <option value="Custom">Custom…</option>
+            </select>
+          </label>
+          <label
+            v-if="newDayPreset === 'Custom'"
+            class="flex flex-1 flex-col gap-1 text-sm font-medium text-slate-700"
+          >
+            Custom label
+            <input
+              v-model="newDayCustomLabel"
+              type="text"
+              required
+              class="rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-accent-600 focus:outline-none focus:ring-2 focus:ring-accent-600"
+            />
+          </label>
+          <label class="flex flex-1 flex-col gap-1 text-sm font-medium text-slate-700">
+            Weekday
+            <select
+              v-model="newDayWeekday"
+              class="rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-accent-600 focus:outline-none focus:ring-2 focus:ring-accent-600"
+            >
+              <option value="">Unscheduled</option>
+              <option v-for="wd in WEEKDAYS" :key="wd" :value="wd" :disabled="claimedWeekdays.has(wd)">
+                {{ WEEKDAY_LABELS[wd] }}{{ claimedWeekdays.has(wd) ? ' (scheduled)' : '' }}
+              </option>
+            </select>
+          </label>
           <button
             type="submit"
             :disabled="isCreatingDay"
@@ -326,17 +459,7 @@ onMounted(loadInitialData)
         </ul>
 
         <form class="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm" @submit.prevent="handleAddExercise">
-          <label class="flex flex-col gap-1 text-sm font-medium text-slate-700">
-            Exercise
-            <select
-              v-model="newExerciseId"
-              required
-              class="rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-accent-600 focus:outline-none focus:ring-2 focus:ring-accent-600"
-            >
-              <option :value="null" disabled>Select an exercise</option>
-              <option v-for="ex in exercises" :key="ex.id" :value="ex.id">{{ ex.name }}</option>
-            </select>
-          </label>
+          <ExercisePicker v-model="newExerciseId" :exercises="exercises" />
 
           <div class="grid grid-cols-3 gap-3">
             <label class="flex flex-col gap-1 text-sm font-medium text-slate-700">
