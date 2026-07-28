@@ -15,6 +15,7 @@ export interface User {
   id: number
   email: string
   display_name: string | null
+  daily_calorie_target: number | null
 }
 
 export interface Exercise {
@@ -128,4 +129,62 @@ export interface PlanExerciseRecommendation {
   last_rpe: number | null
   suggested_weight_kg: number | null
   rationale: string
+}
+
+export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack'
+
+export interface FoodItem {
+  id: number
+  name: string
+  calories_per_100g: number | null
+  protein_per_100g: number | null
+  carbs_per_100g: number | null
+  fat_per_100g: number | null
+  is_public: boolean
+  created_by_user_id: number | null
+}
+
+export interface FoodItemCreate {
+  name: string
+  calories_per_100g?: number | null
+  protein_per_100g?: number | null
+  carbs_per_100g?: number | null
+  fat_per_100g?: number | null
+  is_public?: boolean
+}
+
+export interface MealPlanEntry {
+  id: number
+  meal_plan_id: number
+  meal_type: MealType | null
+  quantity_grams: number
+  food_item: FoodItem
+}
+
+export interface MealPlanEntryCreate {
+  food_item_id: number
+  meal_type?: MealType | null
+  quantity_grams: number
+}
+
+export interface MealPlan {
+  id: number
+  user_id: number
+  plan_date: string
+  entries: MealPlanEntry[]
+}
+
+export interface MealPlanCreate {
+  plan_date: string
+}
+
+export interface DailyTotals {
+  meal_plan_id: number
+  plan_date: string
+  total_calories: number
+  total_protein_g: number
+  total_carbs_g: number
+  total_fat_g: number
+  daily_calorie_target: number | null
+  calories_remaining: number | null
 }

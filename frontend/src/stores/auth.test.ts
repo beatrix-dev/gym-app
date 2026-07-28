@@ -7,7 +7,12 @@ import type { User } from '@/types'
 
 vi.mock('@/api/auth')
 
-const mockUser: User = { id: 1, email: 'test@example.com', display_name: 'Test User' }
+const mockUser: User = {
+  id: 1,
+  email: 'test@example.com',
+  display_name: 'Test User',
+  daily_calorie_target: null,
+}
 
 describe('auth store', () => {
   beforeEach(() => {

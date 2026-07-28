@@ -4,7 +4,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.routers import auth, exercises, workout_plans, workout_sessions
+from app.routers import auth, exercises, food_items, meal_plans, workout_plans, workout_sessions
 
 app = FastAPI(title="Gym & Grocery Tracker API", version="0.1.0")
 
@@ -18,6 +18,8 @@ app.add_middleware(
 
 app.include_router(auth.router)
 app.include_router(exercises.router)
+app.include_router(food_items.router)
+app.include_router(meal_plans.router)
 app.include_router(workout_plans.router)
 app.include_router(workout_sessions.router)
 

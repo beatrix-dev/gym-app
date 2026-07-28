@@ -82,16 +82,16 @@ Vue 3 + TypeScript + Vite, talking to the FastAPI backend locally.
 
 **Deliverable:** you can log a real workout end-to-end through the UI.
 
-### Phase 3 — Workout planner + recommendations ⬜ (2 sessions)
+### Phase 3 — Workout planner + recommendations ✅ (2 sessions)
 
-- [ ] Planner: CRUD UI for building a plan (days → exercises → target sets/reps)
-- [ ] Recommendations: rule-based, not ML — e.g. "if last session's top set hit target reps at target RPE, suggest +2.5kg next time" (basic progressive overload logic)
+- [x] Planner: CRUD UI for building a plan (days → exercises → target sets/reps) — create/delete only, no in-place edit yet
+- [x] Recommendations: rule-based, not ML — reps-vs-target plus logged RPE as a fatigue guard, surfaced in the Planner and inline during logging
 
-### Phase 4 — Meal planning ⬜ (2 sessions)
+### Phase 4 — Meal planning ✅ (2 sessions)
 
-- [ ] Food item catalog + macros
-- [ ] Meal plan builder (assign foods to meals to days)
-- [ ] Daily macro totals view (calories/protein/carbs/fat vs. a target you set)
+- [x] Food item catalog + macros — seeded starter catalog (`app/seed_food.py`) plus user-created items, same visibility model as exercises
+- [x] Meal plan builder (assign foods to meals to days) — one plan per date, entries assign a food item + meal type + quantity
+- [x] Daily macro totals view (calories/protein/carbs/fat vs. a target you set) — calories compared against `daily_calorie_target` (settable via `PATCH /auth/me`); protein/carbs/fat shown as informational totals
 
 **Deliverable:** stays decoupled from the workout side except sharing the `users` table — good chance to practice clean module boundaries in one codebase.
 
