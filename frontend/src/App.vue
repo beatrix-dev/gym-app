@@ -38,6 +38,13 @@ function handleLogout() {
             Planner
           </RouterLink>
           <RouterLink
+            to="/meals"
+            class="text-slate-600 hover:text-slate-900"
+            active-class="text-accent-600 hover:text-accent-600"
+          >
+            Meals
+          </RouterLink>
+          <RouterLink
             to="/records"
             class="text-slate-600 hover:text-slate-900"
             active-class="text-accent-600 hover:text-accent-600"

@@ -1,6 +1,11 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { fetchCurrentUser, login as loginRequest, register as registerRequest } from '@/api/auth'
+import {
+  fetchCurrentUser,
+  login as loginRequest,
+  register as registerRequest,
+  updateCurrentUser,
+} from '@/api/auth'
 import { TOKEN_STORAGE_KEY } from '@/api/client'
 import type { User } from '@/types'
 
@@ -37,5 +42,18 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.removeItem(TOKEN_STORAGE_KEY)
   }
 
-  return { token, user, isAuthenticated, login, register, loadCurrentUser, logout }
+  async function updateProfile(dailyCalorieTarget: number | null) {
+    user.value = await updateCurrentUser({ daily_calorie_target: dailyCalorieTarget })
+  }
+
+  return {
+    token,
+    user,
+    isAuthenticated,
+    login,
+    register,
+    loadCurrentUser,
+    logout,
+    updateProfile,
+  }
 })
