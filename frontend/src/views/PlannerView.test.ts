@@ -42,6 +42,7 @@ const day: WorkoutPlanDay = {
   plan_id: 1,
   day_order: 1,
   label: 'Push Day',
+  day_of_week: 'monday',
   plan_exercises: [planExercise],
 }
 
@@ -115,7 +116,7 @@ describe('PlannerView', () => {
     expect(wrapper.text()).toContain('Push Day')
     expect(wrapper.text()).not.toContain('Bench Press')
 
-    await findByText(wrapper, 'li', 'Push Day')!.trigger('click')
+    await findByText(wrapper, 'button', 'Push Day')!.trigger('click')
     await flushPromises()
 
     expect(plansApi.getDayRecommendations).toHaveBeenCalledWith(1, 1)

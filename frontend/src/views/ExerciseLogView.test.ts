@@ -48,6 +48,7 @@ const planWithDay: WorkoutPlan = {
       plan_id: 1,
       day_order: 1,
       label: 'Push Day',
+      day_of_week: null,
       plan_exercises: [],
     },
   ],
@@ -123,7 +124,7 @@ describe('ExerciseLogView', () => {
     const wrapper = mount(ExerciseLogView)
     await flushPromises()
 
-    await wrapper.find('select').setValue('1')
+    await wrapper.findAll('button').find((b) => b.text().includes('Bench Press'))!.trigger('click')
     await wrapper.find('input[type="number"]').setValue(60)
     const numberInputs = wrapper.findAll('input[type="number"]')
     await numberInputs[1]!.setValue(5)
@@ -165,7 +166,8 @@ describe('ExerciseLogView', () => {
     await flushPromises()
 
     expect(wrapper.text()).not.toContain('No sets logged yet.')
-    await wrapper.find('li button').trigger('click')
+    const removeButton = wrapper.findAll('button').find((b) => b.text() === 'Remove')
+    await removeButton!.trigger('click')
     await flushPromises()
 
     expect(sessionsApi.deleteSet).toHaveBeenCalledWith(10, 100)
@@ -234,13 +236,13 @@ describe('ExerciseLogView', () => {
 
     expect(wrapper.text()).not.toContain('Suggested:')
 
-    await wrapper.find('select').setValue('1')
+    await wrapper.findAll('button').find((b) => b.text().includes('Bench Press'))!.trigger('click')
     await flushPromises()
 
     expect(wrapper.text()).toContain('Suggested:')
     expect(wrapper.text()).toContain('62.5kg')
 
-    await wrapper.find('button.text-accent-600').trigger('click')
+    await wrapper.findAll('button').find((b) => b.text() === 'Use')!.trigger('click')
     const weightInput = wrapper.find('input[type="number"]')
     expect((weightInput.element as HTMLInputElement).value).toBe('62.5')
   })

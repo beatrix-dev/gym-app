@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import MonthCalendar from '@/components/MonthCalendar.vue'
 import { useAuthStore } from '@/stores/auth'
 import { createFoodItem, listFoodItems } from '@/api/foodItems'
 import {
@@ -25,7 +26,7 @@ const selectedPlanId = ref<number | null>(null)
 const dailyTotals = ref<DailyTotals | null>(null)
 const isLoadingTotals = ref(false)
 
-const newPlanDate = ref('')
+const pendingCreateDate = ref<string | null>(null)
 const isCreatingPlan = ref(false)
 
 const newEntryFoodItemId = ref<number | null>(null)
@@ -44,6 +45,11 @@ const calorieTarget = ref<number | null>(authStore.user?.daily_calorie_target ??
 const isSavingTarget = ref(false)
 
 const selectedPlan = computed(() => plans.value.find((p) => p.id === selectedPlanId.value) ?? null)
+const planDatesSet = computed(() => plans.value.map((p) => p.plan_date))
+
+function planForDate(date: string) {
+  return plans.value.find((p) => p.plan_date === date) ?? null
+}
 
 async function loadInitialData() {
   isLoading.value = true
@@ -77,14 +83,26 @@ function selectPlan(planId: number) {
   loadTotals()
 }
 
-async function handleCreatePlan() {
-  if (!newPlanDate.value) return
+function handleDateSelect(date: string) {
+  const existing = planForDate(date)
+  if (existing) {
+    pendingCreateDate.value = null
+    selectPlan(existing.id)
+  } else {
+    selectedPlanId.value = null
+    dailyTotals.value = null
+    pendingCreateDate.value = date
+  }
+}
+
+async function handleCreatePlanForDate() {
+  if (!pendingCreateDate.value) return
   isCreatingPlan.value = true
   error.value = ''
   try {
-    const plan = await createMealPlan({ plan_date: newPlanDate.value })
+    const plan = await createMealPlan({ plan_date: pendingCreateDate.value })
     plans.value.unshift(plan)
-    newPlanDate.value = ''
+    pendingCreateDate.value = null
     selectPlan(plan.id)
   } catch {
     error.value = 'Failed to create meal plan.'
@@ -95,11 +113,13 @@ async function handleCreatePlan() {
 
 async function handleDeletePlan(planId: number) {
   try {
+    const deletedDate = plans.value.find((p) => p.id === planId)?.plan_date ?? null
     await deleteMealPlan(planId)
     plans.value = plans.value.filter((p) => p.id !== planId)
     if (selectedPlanId.value === planId) {
       selectedPlanId.value = null
       dailyTotals.value = null
+      pendingCreateDate.value = deletedDate
     }
   } catch {
     error.value = 'Failed to delete meal plan.'
@@ -193,43 +213,32 @@ onMounted(loadInitialData)
     <div v-else class="flex flex-col gap-8">
       <section class="flex flex-col gap-3">
         <h2 class="text-sm font-semibold text-slate-900">Meal plans</h2>
-        <p v-if="plans.length === 0" class="text-sm text-slate-500">
-          No meal plans yet — create one below.
-        </p>
-        <ul v-else class="flex flex-col gap-2">
-          <li
-            v-for="plan in plans"
-            :key="plan.id"
-            class="flex cursor-pointer items-center justify-between rounded-xl border px-4 py-3 text-sm shadow-sm"
-            :class="
-              plan.id === selectedPlanId
-                ? 'border-accent-600 bg-accent-50'
-                : 'border-slate-200 bg-white hover:bg-slate-50'
-            "
-            @click="selectPlan(plan.id)"
-          >
-            <span class="font-medium text-slate-900">{{ plan.plan_date }}</span>
-            <button class="text-xs text-error hover:opacity-80" @click.stop="handleDeletePlan(plan.id)">
-              Remove
-            </button>
-          </li>
-        </ul>
+        <MonthCalendar
+          :marked-dates="planDatesSet"
+          :selected-date="selectedPlan?.plan_date ?? null"
+          @date-select="handleDateSelect"
+        />
 
-        <form class="flex gap-2" @submit.prevent="handleCreatePlan">
-          <input
-            v-model="newPlanDate"
-            type="date"
-            required
-            class="flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-accent-600 focus:outline-none focus:ring-2 focus:ring-accent-600"
-          />
-          <button
-            type="submit"
-            :disabled="isCreatingPlan"
-            class="rounded-md bg-accent-600 px-4 py-2 text-sm font-medium text-white hover:bg-accent-700 disabled:opacity-50"
-          >
-            {{ isCreatingPlan ? 'Creating…' : 'Add plan' }}
+        <div v-if="selectedPlan" class="flex items-center justify-between">
+          <p class="text-sm text-slate-600">Viewing {{ selectedPlan.plan_date }}</p>
+          <button class="text-xs text-error hover:opacity-80" @click="handleDeletePlan(selectedPlan.id)">
+            Delete this plan
           </button>
-        </form>
+        </div>
+        <div
+          v-else-if="pendingCreateDate"
+          class="flex items-center justify-between rounded-xl border border-dashed border-slate-300 px-4 py-3 text-sm"
+        >
+          <span class="text-slate-600">No meal plan for {{ pendingCreateDate }} yet.</span>
+          <button
+            :disabled="isCreatingPlan"
+            class="rounded-md bg-accent-600 px-3 py-2 text-sm font-medium text-white hover:bg-accent-700 disabled:opacity-50"
+            @click="handleCreatePlanForDate"
+          >
+            {{ isCreatingPlan ? 'Creating…' : 'Create meal plan' }}
+          </button>
+        </div>
+        <p v-else class="text-sm text-slate-500">Select a day on the calendar.</p>
       </section>
 
       <section v-if="selectedPlan" class="flex flex-col gap-3">

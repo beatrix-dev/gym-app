@@ -77,6 +77,15 @@ const overTargetTotals: DailyTotals = {
   calories_remaining: -200,
 }
 
+async function selectCalendarDate(wrapper: ReturnType<typeof mount>, date: string) {
+  await wrapper.find(`button[data-date="${date}"]`).trigger('click')
+  await flushPromises()
+}
+
+function findButtonByText(wrapper: ReturnType<typeof mount>, text: string) {
+  return wrapper.findAll('button').find((button) => button.text().includes(text))
+}
+
 describe('MealPlannerView', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
@@ -91,7 +100,7 @@ describe('MealPlannerView', () => {
     const wrapper = mount(MealPlannerView)
     await flushPromises()
 
-    expect(wrapper.text()).toContain('No meal plans yet')
+    expect(wrapper.text()).toContain('Select a day on the calendar.')
     expect(wrapper.text()).toContain('No food items yet')
   })
 
@@ -113,9 +122,8 @@ describe('MealPlannerView', () => {
     const wrapper = mount(MealPlannerView)
     await flushPromises()
 
-    expect(wrapper.text()).not.toContain('Brown Rice — 200g')
-    await wrapper.find('li').trigger('click')
-    await flushPromises()
+    expect(wrapper.text()).not.toContain('200g')
+    await selectCalendarDate(wrapper, '2026-07-28')
 
     expect(wrapper.text()).toContain('Brown Rice')
     expect(wrapper.text()).toContain('200g')
@@ -136,8 +144,8 @@ describe('MealPlannerView', () => {
     const wrapper = mount(MealPlannerView)
     await flushPromises()
 
-    await wrapper.find('input[type="date"]').setValue('2026-08-01')
-    await wrapper.find('form').trigger('submit.prevent')
+    await selectCalendarDate(wrapper, '2026-08-01')
+    await findButtonByText(wrapper, 'Create meal plan')!.trigger('click')
     await flushPromises()
 
     expect(mealPlansApi.createMealPlan).toHaveBeenCalledWith({ plan_date: '2026-08-01' })
@@ -154,15 +162,14 @@ describe('MealPlannerView', () => {
     const wrapper = mount(MealPlannerView)
     await flushPromises()
 
-    await wrapper.find('li').trigger('click')
-    await flushPromises()
+    await selectCalendarDate(wrapper, '2026-07-28')
     expect(wrapper.text()).toContain('Daily totals')
 
-    await wrapper.find('li button').trigger('click')
+    await findButtonByText(wrapper, 'Delete this plan')!.trigger('click')
     await flushPromises()
 
     expect(mealPlansApi.deleteMealPlan).toHaveBeenCalledWith(5)
-    expect(wrapper.text()).toContain('No meal plans yet')
+    expect(wrapper.text()).toContain('No meal plan for 2026-07-28 yet.')
     expect(wrapper.text()).not.toContain('Daily totals')
   })
 
@@ -203,14 +210,13 @@ describe('MealPlannerView', () => {
 
     const wrapper = mount(MealPlannerView)
     await flushPromises()
-    await wrapper.find('li').trigger('click')
-    await flushPromises()
+    await selectCalendarDate(wrapper, '2026-07-28')
 
     const selects = wrapper.findAll('select')
     await selects[0]!.setValue('2')
     await selects[1]!.setValue('lunch')
     await wrapper.find('input[type="number"]').setValue(200)
-    await wrapper.findAll('form').at(1)!.trigger('submit.prevent')
+    await wrapper.findAll('form').at(0)!.trigger('submit.prevent')
     await flushPromises()
 
     expect(mealPlansApi.addMealPlanEntry).toHaveBeenCalledWith(5, {
@@ -234,8 +240,7 @@ describe('MealPlannerView', () => {
 
     const wrapper = mount(MealPlannerView)
     await flushPromises()
-    await wrapper.find('li').trigger('click')
-    await flushPromises()
+    await selectCalendarDate(wrapper, '2026-07-28')
 
     const entryRows = wrapper.findAll('li').filter((li) => li.text().includes('200g'))
     expect(entryRows).toHaveLength(2)
@@ -248,8 +253,7 @@ describe('MealPlannerView', () => {
 
     const wrapper = mount(MealPlannerView)
     await flushPromises()
-    await wrapper.find('li').trigger('click')
-    await flushPromises()
+    await selectCalendarDate(wrapper, '2026-07-28')
 
     const quantityInput = wrapper.find('input[type="number"][min="0.01"]')
     expect(quantityInput.exists()).toBe(true)
@@ -263,8 +267,7 @@ describe('MealPlannerView', () => {
 
     const wrapper = mount(MealPlannerView)
     await flushPromises()
-    await wrapper.find('li').trigger('click')
-    await flushPromises()
+    await selectCalendarDate(wrapper, '2026-07-28')
     expect(wrapper.text()).toContain('246')
 
     const entryRemoveButton = wrapper
@@ -286,15 +289,13 @@ describe('MealPlannerView', () => {
 
     const wrapper = mount(MealPlannerView)
     await flushPromises()
-    await wrapper.find('li').trigger('click')
-    await flushPromises()
+    await selectCalendarDate(wrapper, '2026-07-28')
 
     const underTargetText = wrapper.findAll('p').find((p) => p.text().includes('remaining'))
     expect(underTargetText!.classes()).toContain('text-success')
 
     vi.mocked(mealPlansApi.getDailyTotals).mockResolvedValue(overTargetTotals)
-    await wrapper.find('li').trigger('click')
-    await flushPromises()
+    await selectCalendarDate(wrapper, '2026-07-28')
 
     const overTargetText = wrapper.findAll('p').find((p) => p.text().includes('over target'))
     expect(overTargetText!.classes()).toContain('text-error')
@@ -313,8 +314,7 @@ describe('MealPlannerView', () => {
 
     const wrapper = mount(MealPlannerView)
     await flushPromises()
-    await wrapper.find('li').trigger('click')
-    await flushPromises()
+    await selectCalendarDate(wrapper, '2026-07-28')
 
     const targetInput = wrapper.find('input[type="number"][min="0"]')
     await targetInput.setValue(2200)
