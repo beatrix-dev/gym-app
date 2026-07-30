@@ -35,7 +35,7 @@ function handleLogout() {
             class="text-slate-600 hover:text-slate-900"
             active-class="text-accent-600 hover:text-accent-600"
           >
-            Planner
+            Workout Planner
           </RouterLink>
           <RouterLink
             to="/meals"

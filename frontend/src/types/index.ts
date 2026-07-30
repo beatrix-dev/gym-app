@@ -144,9 +144,12 @@ export interface PlanExerciseRecommendation {
 
 export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack'
 
+export type FoodCategory = 'protein' | 'dairy' | 'grains' | 'produce' | 'fats_oils' | 'other'
+
 export interface FoodItem {
   id: number
   name: string
+  category: FoodCategory | null
   calories_per_100g: number | null
   protein_per_100g: number | null
   carbs_per_100g: number | null
@@ -157,6 +160,7 @@ export interface FoodItem {
 
 export interface FoodItemCreate {
   name: string
+  category?: FoodCategory | null
   calories_per_100g?: number | null
   protein_per_100g?: number | null
   carbs_per_100g?: number | null

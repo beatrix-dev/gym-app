@@ -27,6 +27,12 @@ const exerciseName = (id: number) => exercises.value.find((e) => e.id === id)?.n
 
 const sortedSets = computed(() => currentSession.value?.sets ?? [])
 
+const lastSetForExercise = computed(() => {
+  if (exerciseId.value === null) return null
+  const setsForExercise = sortedSets.value.filter((s) => s.exercise_id === exerciseId.value)
+  return setsForExercise.length > 0 ? setsForExercise[setsForExercise.length - 1]! : null
+})
+
 const planDayOptions = computed(() =>
   plans.value.flatMap((p) =>
     p.days.map((d) => ({
@@ -114,6 +120,27 @@ async function handleLogSet() {
     reps.value = null
     rpe.value = null
     isWarmup.value = false
+  } catch {
+    error.value = 'Failed to log set.'
+  } finally {
+    isLoggingSet.value = false
+  }
+}
+
+async function handleRepeatLastSet() {
+  if (!currentSession.value || !lastSetForExercise.value) return
+  isLoggingSet.value = true
+  error.value = ''
+  try {
+    const last = lastSetForExercise.value
+    const set = await logSet(currentSession.value.id, {
+      exercise_id: last.exercise_id,
+      weight_kg: last.weight_kg,
+      reps: last.reps,
+      rpe: last.rpe,
+      is_warmup: last.is_warmup,
+    })
+    currentSession.value.sets.push(set)
   } catch {
     error.value = 'Failed to log set.'
   } finally {
@@ -236,13 +263,24 @@ onMounted(loadInitialData)
           Warmup set
         </label>
 
-        <button
-          type="submit"
-          :disabled="isLoggingSet"
-          class="rounded-md bg-accent-600 px-3 py-2 text-sm font-medium text-white hover:bg-accent-700 disabled:opacity-50"
-        >
-          {{ isLoggingSet ? 'Logging…' : 'Log set' }}
-        </button>
+        <div class="flex items-center gap-3">
+          <button
+            type="submit"
+            :disabled="isLoggingSet"
+            class="rounded-md bg-accent-600 px-3 py-2 text-sm font-medium text-white hover:bg-accent-700 disabled:opacity-50"
+          >
+            {{ isLoggingSet ? 'Logging…' : 'Log set' }}
+          </button>
+          <button
+            v-if="lastSetForExercise"
+            type="button"
+            :disabled="isLoggingSet"
+            class="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+            @click="handleRepeatLastSet"
+          >
+            Repeat last set ({{ lastSetForExercise.weight_kg }}kg × {{ lastSetForExercise.reps }})
+          </button>
+        </div>
       </form>
 
       <div>

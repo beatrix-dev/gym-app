@@ -22,11 +22,21 @@ class MealType(str, enum.Enum):
     snack = "snack"
 
 
+class FoodCategory(str, enum.Enum):
+    protein = "protein"
+    dairy = "dairy"
+    grains = "grains"
+    produce = "produce"
+    fats_oils = "fats_oils"
+    other = "other"
+
+
 class FoodItem(Base):
     __tablename__ = "food_items"
 
     id = Column(BigInteger, primary_key=True, autoincrement=True)
     name = Column(String(150), nullable=False)
+    category = Column(Enum(FoodCategory), nullable=True)
     calories_per_100g = Column(DECIMAL(6, 2))
     protein_per_100g = Column(DECIMAL(5, 2))
     carbs_per_100g = Column(DECIMAL(5, 2))

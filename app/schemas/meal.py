@@ -2,11 +2,12 @@ from datetime import date
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.models.meal import MealType
+from app.models.meal import FoodCategory, MealType
 
 
 class FoodItemCreate(BaseModel):
     name: str
+    category: FoodCategory | None = None
     calories_per_100g: float | None = None
     protein_per_100g: float | None = None
     carbs_per_100g: float | None = None
@@ -16,6 +17,7 @@ class FoodItemCreate(BaseModel):
 
 class FoodItemUpdate(BaseModel):
     name: str | None = None
+    category: FoodCategory | None = None
     calories_per_100g: float | None = None
     protein_per_100g: float | None = None
     carbs_per_100g: float | None = None
@@ -28,6 +30,7 @@ class FoodItemOut(BaseModel):
 
     id: int
     name: str
+    category: FoodCategory | None = None
     calories_per_100g: float | None = None
     protein_per_100g: float | None = None
     carbs_per_100g: float | None = None
