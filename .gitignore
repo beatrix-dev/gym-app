@@ -50,3 +50,6 @@ Thumbs.db
 # Local docs / working files
 docs/
 CLAUDE.local.md
+.claude/*
+!.claude/skills/
+!.claude/skills/**

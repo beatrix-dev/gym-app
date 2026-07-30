@@ -54,6 +54,10 @@ const planWithDay: WorkoutPlan = {
   ],
 }
 
+function findButtonByRepeatText(wrapper: ReturnType<typeof mount>) {
+  return wrapper.findAll('button').find((b) => b.text().includes('Repeat last set'))
+}
+
 describe('ExerciseLogView', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -210,6 +214,46 @@ describe('ExerciseLogView', () => {
 
     expect(sessionsApi.startSession).toHaveBeenCalledWith(5)
     expect(plansApi.getDayRecommendations).toHaveBeenCalledWith(1, 5)
+  })
+
+  it('repeats the last logged set for the selected exercise with one click', async () => {
+    const firstSet = {
+      id: 100,
+      session_id: 10,
+      exercise_id: 1,
+      set_order: null,
+      weight_kg: 60,
+      reps: 5,
+      rpe: 8,
+      is_warmup: false,
+    }
+    vi.mocked(exercisesApi.listExercises).mockResolvedValue(exercises)
+    vi.mocked(sessionsApi.listSessions).mockResolvedValue([{ ...activeSession, sets: [firstSet] }])
+    vi.mocked(sessionsApi.logSet).mockResolvedValue({ ...firstSet, id: 101 })
+
+    const wrapper = mount(ExerciseLogView)
+    await flushPromises()
+
+    expect(findButtonByRepeatText(wrapper)).toBeUndefined()
+
+    await wrapper.findAll('button').find((b) => b.text().includes('Bench Press'))!.trigger('click')
+    await flushPromises()
+
+    const repeatButton = findButtonByRepeatText(wrapper)
+    expect(repeatButton).toBeDefined()
+    expect(repeatButton!.text()).toContain('60kg × 5')
+
+    await repeatButton!.trigger('click')
+    await flushPromises()
+
+    expect(sessionsApi.logSet).toHaveBeenCalledWith(10, {
+      exercise_id: 1,
+      weight_kg: 60,
+      reps: 5,
+      rpe: 8,
+      is_warmup: false,
+    })
+    expect(wrapper.findAll('li').filter((li) => li.text().includes('60kg × 5'))).toHaveLength(2)
   })
 
   it('shows a suggested weight for a matching exercise and can apply it', async () => {

@@ -14,6 +14,7 @@ vi.mock('@/api/auth')
 const chicken: FoodItem = {
   id: 1,
   name: 'Chicken Breast',
+  category: 'protein',
   calories_per_100g: 165,
   protein_per_100g: 31,
   carbs_per_100g: 0,
@@ -25,6 +26,7 @@ const chicken: FoodItem = {
 const rice: FoodItem = {
   id: 2,
   name: 'Brown Rice',
+  category: 'grains',
   calories_per_100g: 123,
   protein_per_100g: 2.7,
   carbs_per_100g: 25.6,
@@ -77,13 +79,33 @@ const overTargetTotals: DailyTotals = {
   calories_remaining: -200,
 }
 
+// Mirrors MealPlannerView's localIsoDate() so tests can assert against
+// whatever "today" actually is without hardcoding (and colliding with) a date.
+function localIsoDate(date: Date): string {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+const todayIso = localIsoDate(new Date())
+
+function findButtonByText(wrapper: ReturnType<typeof mount>, text: string) {
+  return wrapper.findAll('button').find((button) => button.text().includes(text))
+}
+
+async function switchTab(wrapper: ReturnType<typeof mount>, label: "Today's Log" | 'Plan Ahead') {
+  await findButtonByText(wrapper, label)!.trigger('click')
+  await flushPromises()
+}
+
 async function selectCalendarDate(wrapper: ReturnType<typeof mount>, date: string) {
   await wrapper.find(`button[data-date="${date}"]`).trigger('click')
   await flushPromises()
 }
 
-function findButtonByText(wrapper: ReturnType<typeof mount>, text: string) {
-  return wrapper.findAll('button').find((button) => button.text().includes(text))
+async function selectFoodInPicker(wrapper: ReturnType<typeof mount>, name: string) {
+  await findButtonByText(wrapper, name)!.trigger('click')
 }
 
 describe('MealPlannerView', () => {
@@ -100,8 +122,9 @@ describe('MealPlannerView', () => {
     const wrapper = mount(MealPlannerView)
     await flushPromises()
 
-    expect(wrapper.text()).toContain('Select a day on the calendar.')
-    expect(wrapper.text()).toContain('No food items yet')
+    expect(wrapper.text()).toContain("Today's Log")
+    expect(wrapper.text()).toContain('Nothing logged yet')
+    expect(wrapper.text()).toContain('No foods match.')
   })
 
   it('shows an error message when initial data fails to load', async () => {
@@ -121,6 +144,7 @@ describe('MealPlannerView', () => {
 
     const wrapper = mount(MealPlannerView)
     await flushPromises()
+    await switchTab(wrapper, 'Plan Ahead')
 
     expect(wrapper.text()).not.toContain('200g')
     await selectCalendarDate(wrapper, '2026-07-28')
@@ -143,6 +167,7 @@ describe('MealPlannerView', () => {
 
     const wrapper = mount(MealPlannerView)
     await flushPromises()
+    await switchTab(wrapper, 'Plan Ahead')
 
     await selectCalendarDate(wrapper, '2026-08-01')
     await findButtonByText(wrapper, 'Create meal plan')!.trigger('click')
@@ -161,6 +186,7 @@ describe('MealPlannerView', () => {
 
     const wrapper = mount(MealPlannerView)
     await flushPromises()
+    await switchTab(wrapper, 'Plan Ahead')
 
     await selectCalendarDate(wrapper, '2026-07-28')
     expect(wrapper.text()).toContain('Daily totals')
@@ -173,7 +199,7 @@ describe('MealPlannerView', () => {
     expect(wrapper.text()).not.toContain('Daily totals')
   })
 
-  it('creates a food item and it becomes available in the catalog', async () => {
+  it('creates a food item inline and auto-selects it in the picker', async () => {
     vi.mocked(foodItemsApi.listFoodItems).mockResolvedValue([])
     vi.mocked(mealPlansApi.listMealPlans).mockResolvedValue([])
     vi.mocked(foodItemsApi.createFoodItem).mockResolvedValue(chicken)
@@ -181,18 +207,21 @@ describe('MealPlannerView', () => {
     const wrapper = mount(MealPlannerView)
     await flushPromises()
 
-    const nameInput = wrapper.find('input[type="text"]')
+    await findButtonByText(wrapper, 'Add a new food')!.trigger('click')
+
+    const nameInput = wrapper.findAll('input[type="text"]').find((i) => !i.attributes('placeholder'))!
     await nameInput.setValue('Chicken Breast')
     const numberInputs = wrapper.findAll('input[type="number"]')
     await numberInputs[0]!.setValue(165)
     await numberInputs[1]!.setValue(31)
     await numberInputs[2]!.setValue(0)
     await numberInputs[3]!.setValue(3.6)
-    await wrapper.findAll('form').at(-1)!.trigger('submit.prevent')
+    await findButtonByText(wrapper, 'Add food')!.trigger('click')
     await flushPromises()
 
     expect(foodItemsApi.createFoodItem).toHaveBeenCalledWith({
       name: 'Chicken Breast',
+      category: null,
       calories_per_100g: 165,
       protein_per_100g: 31,
       carbs_per_100g: 0,
@@ -210,13 +239,13 @@ describe('MealPlannerView', () => {
 
     const wrapper = mount(MealPlannerView)
     await flushPromises()
+    await switchTab(wrapper, 'Plan Ahead')
     await selectCalendarDate(wrapper, '2026-07-28')
 
-    const selects = wrapper.findAll('select')
-    await selects[0]!.setValue('2')
-    await selects[1]!.setValue('lunch')
+    await selectFoodInPicker(wrapper, 'Brown Rice')
+    await wrapper.find('select').setValue('lunch')
     await wrapper.find('input[type="number"]').setValue(200)
-    await wrapper.findAll('form').at(0)!.trigger('submit.prevent')
+    await wrapper.find('form').trigger('submit.prevent')
     await flushPromises()
 
     expect(mealPlansApi.addMealPlanEntry).toHaveBeenCalledWith(5, {
@@ -240,23 +269,26 @@ describe('MealPlannerView', () => {
 
     const wrapper = mount(MealPlannerView)
     await flushPromises()
+    await switchTab(wrapper, 'Plan Ahead')
     await selectCalendarDate(wrapper, '2026-07-28')
 
     const entryRows = wrapper.findAll('li').filter((li) => li.text().includes('200g'))
     expect(entryRows).toHaveLength(2)
   })
 
-  it('rejects non-positive quantities at the input level', async () => {
+  it('does not force sub-gram precision on the weight input', async () => {
     vi.mocked(foodItemsApi.listFoodItems).mockResolvedValue([rice])
     vi.mocked(mealPlansApi.listMealPlans).mockResolvedValue([planWithEntry])
     vi.mocked(mealPlansApi.getDailyTotals).mockResolvedValue(filledTotals)
 
     const wrapper = mount(MealPlannerView)
     await flushPromises()
+    await switchTab(wrapper, 'Plan Ahead')
     await selectCalendarDate(wrapper, '2026-07-28')
 
-    const quantityInput = wrapper.find('input[type="number"][min="0.01"]')
-    expect(quantityInput.exists()).toBe(true)
+    const weightInput = wrapper.find('input[type="number"][min="1"]')
+    expect(weightInput.exists()).toBe(true)
+    expect(weightInput.attributes('step')).toBe('1')
   })
 
   it('shows all-zero totals after deleting the last entry', async () => {
@@ -267,6 +299,7 @@ describe('MealPlannerView', () => {
 
     const wrapper = mount(MealPlannerView)
     await flushPromises()
+    await switchTab(wrapper, 'Plan Ahead')
     await selectCalendarDate(wrapper, '2026-07-28')
     expect(wrapper.text()).toContain('246')
 
@@ -289,6 +322,7 @@ describe('MealPlannerView', () => {
 
     const wrapper = mount(MealPlannerView)
     await flushPromises()
+    await switchTab(wrapper, 'Plan Ahead')
     await selectCalendarDate(wrapper, '2026-07-28')
 
     const underTargetText = wrapper.findAll('p').find((p) => p.text().includes('remaining'))
@@ -303,8 +337,7 @@ describe('MealPlannerView', () => {
 
   it('saves a daily calorie target through the auth store', async () => {
     vi.mocked(foodItemsApi.listFoodItems).mockResolvedValue([])
-    vi.mocked(mealPlansApi.listMealPlans).mockResolvedValue([planWithEntry])
-    vi.mocked(mealPlansApi.getDailyTotals).mockResolvedValue(filledTotals)
+    vi.mocked(mealPlansApi.listMealPlans).mockResolvedValue([])
     vi.mocked(authApi.updateCurrentUser).mockResolvedValue({
       id: 1,
       email: 'test@example.com',
@@ -314,14 +347,63 @@ describe('MealPlannerView', () => {
 
     const wrapper = mount(MealPlannerView)
     await flushPromises()
-    await selectCalendarDate(wrapper, '2026-07-28')
 
     const targetInput = wrapper.find('input[type="number"][min="0"]')
     await targetInput.setValue(2200)
-    const targetForm = wrapper.findAll('form').at(-2)!
-    await targetForm.trigger('submit.prevent')
+    await wrapper.findAll('form').at(-1)!.trigger('submit.prevent')
     await flushPromises()
 
     expect(authApi.updateCurrentUser).toHaveBeenCalledWith({ daily_calorie_target: 2200 })
+  })
+
+  it("logs food to today's log without touching the calendar", async () => {
+    vi.mocked(foodItemsApi.listFoodItems).mockResolvedValue([chicken, rice])
+    vi.mocked(mealPlansApi.listMealPlans).mockResolvedValue([])
+    vi.mocked(mealPlansApi.createMealPlan).mockResolvedValue({
+      id: 20,
+      user_id: 1,
+      plan_date: todayIso,
+      entries: [],
+    })
+    vi.mocked(mealPlansApi.addMealPlanEntry).mockResolvedValue({
+      id: 30,
+      meal_plan_id: 20,
+      meal_type: null,
+      quantity_grams: 150,
+      food_item: chicken,
+    })
+    vi.mocked(mealPlansApi.getDailyTotals).mockResolvedValue(filledTotals)
+
+    const wrapper = mount(MealPlannerView)
+    await flushPromises()
+
+    expect(wrapper.text()).not.toContain('Meal plans')
+
+    await selectFoodInPicker(wrapper, 'Chicken Breast')
+    await wrapper.find('input[type="number"]').setValue(150)
+    await wrapper.find('form').trigger('submit.prevent')
+    await flushPromises()
+
+    expect(mealPlansApi.createMealPlan).toHaveBeenCalledWith({ plan_date: todayIso })
+    expect(mealPlansApi.addMealPlanEntry).toHaveBeenCalledWith(20, {
+      food_item_id: 1,
+      meal_type: null,
+      quantity_grams: 150,
+    })
+    expect(wrapper.text()).toContain('Chicken Breast')
+  })
+
+  it('groups the food catalog by category', async () => {
+    vi.mocked(foodItemsApi.listFoodItems).mockResolvedValue([chicken, rice])
+    vi.mocked(mealPlansApi.listMealPlans).mockResolvedValue([])
+
+    const wrapper = mount(MealPlannerView)
+    await flushPromises()
+    await switchTab(wrapper, 'Plan Ahead')
+
+    await findButtonByText(wrapper, 'Browse food catalog')!.trigger('click')
+
+    expect(wrapper.text()).toContain('Protein')
+    expect(wrapper.text()).toContain('Grains & Carbs')
   })
 })

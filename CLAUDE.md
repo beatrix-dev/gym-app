@@ -1,44 +1,29 @@
-# Project Overview
+# Gym & Grocery Tracker
 
-This repository follows a documentation-first engineering workflow.
+## Before implementation
 
-Before implementing any feature:
+- Read `ENGINEERING_PRINCIPLES.md` for every feature.
+- For UI work, also read `UI_QUALITY_BAR.md` and `FRONTEND_STYLE_GUIDE.md`.
+- Read `STACK_GUIDE.md` before framework-specific work.
+- Read `ARCHITECTURE.md` before adding folders or abstractions.
 
-1. Read this file.
-2. Read ENGINEERING_PRINCIPLES.md.
-3. Read UI_QUALITY_BAR.md for UI work.
-4. Read FRONTEND_STYLE_GUIDE.md before creating or modifying components.
-5. Read STACK_GUIDE.md for framework-specific guidance.
-6. Read ARCHITECTURE.md before introducing new folders or abstractions.
+## Working agreements
 
----
+- Prefer the smallest correct, accessible, maintainable change.
+- Reuse existing components and avoid new dependencies unless necessary.
+- Keep Vue components focused; put business logic in composables, services, or API modules.
+- Explain the implementation plan before editing.
+- Preserve unrelated uncommitted work.
 
-## Objectives
+## Cost-conscious workflow
 
-Prioritise:
+- Use one main agent for normal implementation; do not create planner, implementer, reviewer, and tester subagents by default.
+- Delegate only independent, read-heavy investigations that would otherwise flood the main context.
+- Run the narrowest relevant test or build command; broaden validation only when the change warrants it.
+- Invoke `/codex-review` once after a coherent change and its targeted validation, not after each edit.
 
-- Correctness
-- Readability
-- Maintainability
-- Consistency
-- Accessibility
-- Performance
+## Completion
 
----
-
-## Working Style
-
-Before writing code:
-
-- Explain the implementation plan.
-- Reuse existing components where possible.
-- Avoid introducing unnecessary dependencies.
-- Prefer incremental changes over rewrites.
-
-When finished:
-
-- Verify functionality.
-- Review your own implementation.
-- Mention any limitations or assumptions.
-
-Never claim something is verified unless it has actually been verified.
+- Self-review for correctness, reuse, accessibility, and clear naming.
+- State what was verified and any remaining assumptions or limitations.
+- Never claim verification that did not occur.
