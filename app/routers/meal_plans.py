@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.core.database import get_db
 from app.core.deps import get_current_user
-from app.models.meal import FoodItem, MealPlan, MealPlanEntry
+from app.models.meal import FoodItem, FoodUnit, MealPlan, MealPlanEntry
 from app.models.user import User
 from app.routers.food_items import _visible_to
 from app.schemas.meal import (
@@ -36,12 +36,36 @@ def _get_owned_entry(db: Session, plan_id: int, entry_id: int, user: User) -> Me
 def _get_visible_food_item(db: Session, food_item_id: int, user: User) -> FoodItem:
     food_item = (
         db.query(FoodItem)
+        .options(joinedload(FoodItem.units))
         .filter(FoodItem.id == food_item_id, _visible_to(user))
         .first()
     )
     if food_item is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Food item not found")
     return food_item
+
+
+def _validate_unit(food_item: FoodItem, unit: FoodUnit) -> None:
+    if unit == FoodUnit.grams:
+        return
+    if not any(u.unit == unit for u in food_item.units):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"{food_item.name} has no conversion defined for unit '{unit.value}'",
+        )
+
+
+def _entry_grams(entry: MealPlanEntry) -> float:
+    quantity = float(entry.quantity)
+    if entry.unit == FoodUnit.grams:
+        return quantity
+    conversion = next((u for u in entry.food_item.units if u.unit == entry.unit), None)
+    if conversion is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"{entry.food_item.name} has no conversion defined for unit '{entry.unit.value}'",
+        )
+    return quantity * float(conversion.grams_per_unit)
 
 
 @router.post("", response_model=MealPlanOut, status_code=status.HTTP_201_CREATED)
@@ -100,7 +124,8 @@ def add_entry(
     current_user: User = Depends(get_current_user),
 ):
     _get_owned_plan(db, plan_id, current_user)
-    _get_visible_food_item(db, payload.food_item_id, current_user)
+    food_item = _get_visible_food_item(db, payload.food_item_id, current_user)
+    _validate_unit(food_item, payload.unit)
 
     # Two entries can share the same food_item_id + meal_type on one plan -
     # e.g. two separate 100g logs of rice at lunch. That's valid, not a bug.
@@ -121,8 +146,13 @@ def update_entry(
 ):
     entry = _get_owned_entry(db, plan_id, entry_id, current_user)
     updates = payload.model_dump(exclude_unset=True)
-    if "food_item_id" in updates:
-        _get_visible_food_item(db, updates["food_item_id"], current_user)
+    if "unit" in updates or "food_item_id" in updates:
+        food_item = (
+            _get_visible_food_item(db, updates["food_item_id"], current_user)
+            if "food_item_id" in updates
+            else entry.food_item
+        )
+        _validate_unit(food_item, updates.get("unit", entry.unit))
     for field, value in updates.items():
         setattr(entry, field, value)
     db.commit()
@@ -145,14 +175,14 @@ def delete_entry(
 def _compute_totals(db: Session, plan: MealPlan, user: User) -> DailyTotalsOut:
     entries = (
         db.query(MealPlanEntry)
-        .options(joinedload(MealPlanEntry.food_item))
+        .options(joinedload(MealPlanEntry.food_item).joinedload(FoodItem.units))
         .filter(MealPlanEntry.meal_plan_id == plan.id)
         .all()
     )
 
     calories = protein = carbs = fat = 0.0
     for entry in entries:
-        ratio = float(entry.quantity_grams) / 100
+        ratio = _entry_grams(entry) / 100
         food = entry.food_item
         calories += ratio * float(food.calories_per_100g or 0)
         protein += ratio * float(food.protein_per_100g or 0)

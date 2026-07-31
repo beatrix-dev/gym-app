@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import ExercisePicker from '@/components/ExercisePicker.vue'
 import { listExercises } from '@/api/exercises'
 import {
@@ -11,12 +11,15 @@ import {
   deletePlanExercise,
   getDayRecommendations,
   listPlans,
+  updatePlanDay,
 } from '@/api/workoutPlans'
 import type {
   DayOfWeek,
   Exercise,
+  MuscleGroup,
   PlanExerciseRecommendation,
   WorkoutPlan,
+  WorkoutPlanDay,
   WorkoutPlanExercise,
 } from '@/types'
 
@@ -55,6 +58,31 @@ const SPLIT_PRESETS = [
   'Rest Day',
 ] as const
 
+const ALL_MUSCLE_GROUPS: MuscleGroup[] = [
+  'chest',
+  'back',
+  'legs',
+  'shoulders',
+  'arms',
+  'core',
+  'full_body',
+]
+
+const SPLIT_MUSCLE_GROUPS: Record<(typeof SPLIT_PRESETS)[number], MuscleGroup[]> = {
+  Push: ['chest', 'shoulders', 'arms'],
+  Pull: ['back', 'arms'],
+  Legs: ['legs'],
+  Upper: ['chest', 'back', 'shoulders', 'arms'],
+  Lower: ['legs'],
+  'Full Body': ALL_MUSCLE_GROUPS,
+  Chest: ['chest'],
+  Back: ['back'],
+  Shoulders: ['shoulders'],
+  Arms: ['arms'],
+  Core: ['core'],
+  'Rest Day': [],
+}
+
 const exercises = ref<Exercise[]>([])
 const plans = ref<WorkoutPlan[]>([])
 const isLoading = ref(true)
@@ -78,6 +106,7 @@ const newTargetSets = ref<number | null>(null)
 const newTargetRepsMin = ref<number | null>(null)
 const newTargetRepsMax = ref<number | null>(null)
 const isAddingExercise = ref(false)
+const isSetsModalOpen = ref(false)
 
 const selectedPlan = computed(() => plans.value.find((p) => p.id === selectedPlanId.value) ?? null)
 const selectedDay = computed(
@@ -97,6 +126,15 @@ function dayForWeekday(wd: DayOfWeek) {
   return selectedPlan.value?.days.find((d) => d.day_of_week === wd) ?? null
 }
 
+function claimedWeekdaysExcluding(dayId: number): Set<DayOfWeek> {
+  return new Set(
+    (selectedPlan.value?.days ?? [])
+      .filter((d) => d.id !== dayId)
+      .map((d) => d.day_of_week)
+      .filter((d): d is DayOfWeek => d !== null),
+  )
+}
+
 const unscheduledDays = computed(
   () => (selectedPlan.value?.days ?? []).filter((d) => d.day_of_week === null),
 )
@@ -113,6 +151,38 @@ function formatRepRange(pe: WorkoutPlanExercise) {
 function recommendationFor(planExerciseId: number) {
   return recommendations.value.get(planExerciseId)
 }
+
+const recommendedExercises = computed(() => {
+  const label = selectedDay.value?.label
+  if (!label) return []
+  const groups = SPLIT_MUSCLE_GROUPS[label as (typeof SPLIT_PRESETS)[number]]
+  if (!groups || groups.length === 0) return []
+  const alreadyAdded = new Set(selectedDay.value!.plan_exercises.map((pe) => pe.exercise.id))
+  return exercises.value.filter(
+    (ex) => ex.muscle_group !== null && groups.includes(ex.muscle_group) && !alreadyAdded.has(ex.id),
+  )
+})
+
+function pickRecommendedExercise(exerciseId: number) {
+  newExerciseId.value = exerciseId
+}
+
+function openSetsModal() {
+  if (newExerciseId.value === null) return
+  isSetsModalOpen.value = true
+}
+
+function closeSetsModal() {
+  isSetsModalOpen.value = false
+  newExerciseId.value = null
+  newTargetSets.value = null
+  newTargetRepsMin.value = null
+  newTargetRepsMax.value = null
+}
+
+watch(newExerciseId, (id) => {
+  if (id !== null) openSetsModal()
+})
 
 async function loadInitialData() {
   isLoading.value = true
@@ -217,6 +287,18 @@ async function handleDeleteDay(dayId: number) {
   }
 }
 
+async function handleChangeWeekday(day: WorkoutPlanDay, value: DayOfWeek | '') {
+  if (!selectedPlan.value) return
+  const day_of_week = value === '' ? null : value
+  if (day_of_week === day.day_of_week) return
+  try {
+    const updated = await updatePlanDay(selectedPlan.value.id, day.id, { day_of_week })
+    day.day_of_week = updated.day_of_week
+  } catch {
+    error.value = 'Failed to reschedule day.'
+  }
+}
+
 async function handleAddExercise() {
   if (!selectedPlan.value || !selectedDay.value || newExerciseId.value === null) return
   isAddingExercise.value = true
@@ -231,10 +313,7 @@ async function handleAddExercise() {
       target_reps_max: newTargetRepsMax.value,
     })
     selectedDay.value.plan_exercises.push(planExercise)
-    newExerciseId.value = null
-    newTargetSets.value = null
-    newTargetRepsMin.value = null
-    newTargetRepsMax.value = null
+    closeSetsModal()
     await loadRecommendations()
   } catch {
     error.value = 'Failed to add exercise.'
@@ -321,10 +400,10 @@ onMounted(loadInitialData)
           <div class="flex gap-2 overflow-x-auto pb-2">
             <div v-for="wd in WEEKDAYS" :key="wd" class="flex w-32 flex-shrink-0 flex-col gap-1">
               <p class="text-xs font-semibold uppercase text-slate-500">{{ WEEKDAY_LABELS[wd] }}</p>
-              <button
+              <div
                 v-if="dayForWeekday(wd)"
-                type="button"
-                class="rounded-xl border px-3 py-2 text-left text-sm shadow-sm"
+                :data-day-id="dayForWeekday(wd)!.id"
+                class="flex cursor-pointer flex-col gap-1 rounded-xl border px-3 py-2 text-sm shadow-sm"
                 :class="
                   dayForWeekday(wd)!.id === selectedDayId
                     ? 'border-accent-600 bg-accent-50'
@@ -332,13 +411,45 @@ onMounted(loadInitialData)
                 "
                 @click="selectDay(dayForWeekday(wd)!.id)"
               >
-                <span class="block font-medium text-slate-900">
-                  {{ dayForWeekday(wd)!.label || `Day ${dayForWeekday(wd)!.day_order}` }}
-                </span>
+                <div class="flex items-start justify-between gap-1">
+                  <span class="font-medium text-slate-900">
+                    {{ dayForWeekday(wd)!.label || `Day ${dayForWeekday(wd)!.day_order}` }}
+                  </span>
+                  <button
+                    type="button"
+                    aria-label="Remove day"
+                    class="shrink-0 text-xs font-medium text-error hover:opacity-80"
+                    @click.stop="handleDeleteDay(dayForWeekday(wd)!.id)"
+                  >
+                    ×
+                  </button>
+                </div>
                 <span class="text-xs text-slate-500">
                   {{ dayForWeekday(wd)!.plan_exercises.length }} exercises
                 </span>
-              </button>
+                <select
+                  :value="dayForWeekday(wd)!.day_of_week ?? ''"
+                  aria-label="Change weekday"
+                  class="w-full rounded-md border border-slate-300 px-1 py-1 text-xs focus:border-accent-600 focus:outline-none focus:ring-1 focus:ring-accent-600"
+                  @click.stop
+                  @change="
+                    handleChangeWeekday(
+                      dayForWeekday(wd)!,
+                      ($event.target as HTMLSelectElement).value as DayOfWeek | '',
+                    )
+                  "
+                >
+                  <option value="">Unscheduled</option>
+                  <option
+                    v-for="opt in WEEKDAYS"
+                    :key="opt"
+                    :value="opt"
+                    :disabled="claimedWeekdaysExcluding(dayForWeekday(wd)!.id).has(opt)"
+                  >
+                    {{ WEEKDAY_LABELS[opt] }}
+                  </option>
+                </select>
+              </div>
               <p
                 v-else
                 class="rounded-xl border border-dashed border-slate-200 px-3 py-4 text-center text-xs text-slate-400"
@@ -363,9 +474,29 @@ onMounted(loadInitialData)
                 @click="selectDay(day.id)"
               >
                 <span class="font-medium text-slate-900">{{ day.label || `Day ${day.day_order}` }}</span>
-                <button class="text-xs text-error hover:opacity-80" @click.stop="handleDeleteDay(day.id)">
-                  Remove
-                </button>
+                <div class="flex items-center gap-2" @click.stop>
+                  <select
+                    :value="day.day_of_week ?? ''"
+                    aria-label="Schedule day"
+                    class="rounded-md border border-slate-300 px-2 py-1 text-xs focus:border-accent-600 focus:outline-none focus:ring-1 focus:ring-accent-600"
+                    @change="
+                      handleChangeWeekday(day, ($event.target as HTMLSelectElement).value as DayOfWeek | '')
+                    "
+                  >
+                    <option value="">Unscheduled</option>
+                    <option
+                      v-for="wd in WEEKDAYS"
+                      :key="wd"
+                      :value="wd"
+                      :disabled="claimedWeekdaysExcluding(day.id).has(wd)"
+                    >
+                      {{ WEEKDAY_LABELS[wd] }}
+                    </option>
+                  </select>
+                  <button class="text-xs text-error hover:opacity-80" @click="handleDeleteDay(day.id)">
+                    Remove
+                  </button>
+                </div>
               </li>
             </ul>
           </div>
@@ -458,8 +589,44 @@ onMounted(loadInitialData)
           </li>
         </ul>
 
-        <form class="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm" @submit.prevent="handleAddExercise">
+        <div v-if="recommendedExercises.length > 0" class="flex flex-col gap-2">
+          <h3 class="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Recommended for {{ selectedDay.label }}
+          </h3>
+          <div class="flex flex-wrap gap-2">
+            <button
+              v-for="ex in recommendedExercises"
+              :key="ex.id"
+              type="button"
+              class="rounded-full border border-accent-600 bg-accent-50 px-3 py-1 text-xs font-medium text-accent-700 hover:bg-accent-100"
+              @click="pickRecommendedExercise(ex.id)"
+            >
+              + {{ ex.name }}
+            </button>
+          </div>
+        </div>
+
+        <div class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <ExercisePicker v-model="newExerciseId" :exercises="exercises" />
+        </div>
+      </section>
+
+      <div
+        v-if="isSetsModalOpen"
+        class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 px-4"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="sets-modal-title"
+        @keydown.esc="closeSetsModal"
+        @click.self="closeSetsModal"
+      >
+        <form
+          class="flex w-full max-w-sm flex-col gap-4 rounded-xl bg-white p-5 shadow-lg"
+          @submit.prevent="handleAddExercise"
+        >
+          <h2 id="sets-modal-title" class="text-sm font-semibold text-slate-900">
+            {{ exercises.find((e) => e.id === newExerciseId)?.name }}
+          </h2>
 
           <div class="grid grid-cols-3 gap-3">
             <label class="flex flex-col gap-1 text-sm font-medium text-slate-700">
@@ -468,6 +635,7 @@ onMounted(loadInitialData)
                 v-model.number="newTargetSets"
                 type="number"
                 min="1"
+                autofocus
                 class="rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-accent-600 focus:outline-none focus:ring-2 focus:ring-accent-600"
               />
             </label>
@@ -491,15 +659,24 @@ onMounted(loadInitialData)
             </label>
           </div>
 
-          <button
-            type="submit"
-            :disabled="isAddingExercise"
-            class="self-start rounded-md bg-accent-600 px-4 py-2 text-sm font-medium text-white hover:bg-accent-700 disabled:opacity-50"
-          >
-            {{ isAddingExercise ? 'Adding…' : 'Add exercise' }}
-          </button>
+          <div class="flex justify-end gap-2">
+            <button
+              type="button"
+              class="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              @click="closeSetsModal"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              :disabled="isAddingExercise"
+              class="rounded-md bg-accent-600 px-4 py-2 text-sm font-medium text-white hover:bg-accent-700 disabled:opacity-50"
+            >
+              {{ isAddingExercise ? 'Adding…' : 'Add exercise' }}
+            </button>
+          </div>
         </form>
-      </section>
+      </div>
     </div>
   </div>
 </template>
