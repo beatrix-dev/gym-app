@@ -5,6 +5,7 @@ import type {
   WorkoutPlanCreate,
   WorkoutPlanDay,
   WorkoutPlanDayCreate,
+  WorkoutPlanDayUpdate,
   WorkoutPlanExercise,
   WorkoutPlanExerciseCreate,
 } from '@/types'
@@ -28,6 +29,18 @@ export async function createPlanDay(
   payload: WorkoutPlanDayCreate,
 ): Promise<WorkoutPlanDay> {
   const { data } = await apiClient.post<WorkoutPlanDay>(`/workout-plans/${planId}/days`, payload)
+  return data
+}
+
+export async function updatePlanDay(
+  planId: number,
+  dayId: number,
+  payload: WorkoutPlanDayUpdate,
+): Promise<WorkoutPlanDay> {
+  const { data } = await apiClient.patch<WorkoutPlanDay>(
+    `/workout-plans/${planId}/days/${dayId}`,
+    payload,
+  )
   return data
 }
 

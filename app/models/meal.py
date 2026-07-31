@@ -9,6 +9,7 @@ from sqlalchemy import (
     Enum,
     ForeignKey,
     String,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import relationship
 
@@ -31,6 +32,15 @@ class FoodCategory(str, enum.Enum):
     other = "other"
 
 
+class FoodUnit(str, enum.Enum):
+    grams = "grams"
+    ml = "ml"
+    tbsp = "tbsp"
+    tsp = "tsp"
+    cup = "cup"
+    piece = "piece"
+
+
 class FoodItem(Base):
     __tablename__ = "food_items"
 
@@ -46,6 +56,25 @@ class FoodItem(Base):
 
     created_by = relationship("User", back_populates="food_items")
     meal_plan_entries = relationship("MealPlanEntry", back_populates="food_item")
+    units = relationship("FoodItemUnit", back_populates="food_item", cascade="all, delete-orphan")
+
+
+class FoodItemUnit(Base):
+    """A food-specific conversion from a non-gram unit (tbsp, ml, piece, ...) to grams.
+
+    Density/serving size varies per food, so conversions can't be generic
+    (e.g. 1 tbsp of oil != 1 tbsp of flour) — each food defines its own.
+    """
+
+    __tablename__ = "food_item_units"
+    __table_args__ = (UniqueConstraint("food_item_id", "unit", name="uq_food_item_unit"),)
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    food_item_id = Column(BigInteger, ForeignKey("food_items.id"), nullable=False)
+    unit = Column(Enum(FoodUnit), nullable=False)
+    grams_per_unit = Column(DECIMAL(7, 2), nullable=False)
+
+    food_item = relationship("FoodItem", back_populates="units")
 
 
 class MealPlan(Base):
@@ -66,7 +95,8 @@ class MealPlanEntry(Base):
     meal_plan_id = Column(BigInteger, ForeignKey("meal_plans.id"), nullable=False)
     meal_type = Column(Enum(MealType))
     food_item_id = Column(BigInteger, ForeignKey("food_items.id"), nullable=False)
-    quantity_grams = Column(DECIMAL(6, 2), nullable=False)
+    quantity = Column(DECIMAL(7, 2), nullable=False)
+    unit = Column(Enum(FoodUnit), nullable=False, default=FoodUnit.grams)
 
     meal_plan = relationship("MealPlan", back_populates="entries")
     food_item = relationship("FoodItem", back_populates="meal_plan_entries")

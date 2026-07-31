@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.deps import get_current_user
-from app.models.meal import FoodItem, MealPlanEntry
+from app.models.meal import FoodItem, FoodItemUnit, MealPlanEntry
 from app.models.user import User
 from app.schemas.meal import FoodItemCreate, FoodItemOut, FoodItemUpdate
 
@@ -33,7 +33,11 @@ def create_food_item(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    food_item = FoodItem(**payload.model_dump(), created_by_user_id=current_user.id)
+    food_item = FoodItem(
+        **payload.model_dump(exclude={"units"}),
+        created_by_user_id=current_user.id,
+        units=[FoodItemUnit(unit=u.unit, grams_per_unit=u.grams_per_unit) for u in payload.units],
+    )
     db.add(food_item)
     db.commit()
     db.refresh(food_item)

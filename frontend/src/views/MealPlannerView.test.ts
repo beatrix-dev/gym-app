@@ -21,6 +21,7 @@ const chicken: FoodItem = {
   fat_per_100g: 3.6,
   is_public: false,
   created_by_user_id: 1,
+  units: [],
 }
 
 const rice: FoodItem = {
@@ -33,13 +34,28 @@ const rice: FoodItem = {
   fat_per_100g: 1.0,
   is_public: false,
   created_by_user_id: 1,
+  units: [],
+}
+
+const peanutButter: FoodItem = {
+  id: 3,
+  name: 'Peanut Butter',
+  category: 'fats_oils',
+  calories_per_100g: 588,
+  protein_per_100g: 25.1,
+  carbs_per_100g: 20,
+  fat_per_100g: 50.4,
+  is_public: false,
+  created_by_user_id: 1,
+  units: [{ id: 1, unit: 'tbsp', grams_per_unit: 16 }],
 }
 
 const riceEntry: MealPlanEntry = {
   id: 10,
   meal_plan_id: 5,
   meal_type: 'lunch',
-  quantity_grams: 200,
+  quantity: 200,
+  unit: 'grams',
   food_item: rice,
 }
 
@@ -226,6 +242,7 @@ describe('MealPlannerView', () => {
       protein_per_100g: 31,
       carbs_per_100g: 0,
       fat_per_100g: 3.6,
+      units: [],
     })
     expect(wrapper.text()).toContain('Chicken Breast')
   })
@@ -251,7 +268,8 @@ describe('MealPlannerView', () => {
     expect(mealPlansApi.addMealPlanEntry).toHaveBeenCalledWith(5, {
       food_item_id: 2,
       meal_type: 'lunch',
-      quantity_grams: 200,
+      quantity: 200,
+      unit: 'grams',
     })
     expect(mealPlansApi.getDailyTotals).toHaveBeenCalledTimes(2)
     expect(wrapper.text()).toContain('246')
@@ -276,7 +294,7 @@ describe('MealPlannerView', () => {
     expect(entryRows).toHaveLength(2)
   })
 
-  it('does not force sub-gram precision on the weight input', async () => {
+  it('allows fractional quantities so non-gram units like tbsp or cup can be logged', async () => {
     vi.mocked(foodItemsApi.listFoodItems).mockResolvedValue([rice])
     vi.mocked(mealPlansApi.listMealPlans).mockResolvedValue([planWithEntry])
     vi.mocked(mealPlansApi.getDailyTotals).mockResolvedValue(filledTotals)
@@ -286,9 +304,9 @@ describe('MealPlannerView', () => {
     await switchTab(wrapper, 'Plan Ahead')
     await selectCalendarDate(wrapper, '2026-07-28')
 
-    const weightInput = wrapper.find('input[type="number"][min="1"]')
-    expect(weightInput.exists()).toBe(true)
-    expect(weightInput.attributes('step')).toBe('1')
+    const quantityInput = wrapper.find('input[type="number"][min="0.1"]')
+    expect(quantityInput.exists()).toBe(true)
+    expect(quantityInput.attributes('step')).toBe('0.1')
   })
 
   it('shows all-zero totals after deleting the last entry', async () => {
@@ -369,7 +387,8 @@ describe('MealPlannerView', () => {
       id: 30,
       meal_plan_id: 20,
       meal_type: null,
-      quantity_grams: 150,
+      quantity: 150,
+      unit: 'grams',
       food_item: chicken,
     })
     vi.mocked(mealPlansApi.getDailyTotals).mockResolvedValue(filledTotals)
@@ -388,9 +407,26 @@ describe('MealPlannerView', () => {
     expect(mealPlansApi.addMealPlanEntry).toHaveBeenCalledWith(20, {
       food_item_id: 1,
       meal_type: null,
-      quantity_grams: 150,
+      quantity: 150,
+      unit: 'grams',
     })
     expect(wrapper.text()).toContain('Chicken Breast')
+  })
+
+  it("scopes the quantity unit selector to the units the selected food supports", async () => {
+    vi.mocked(foodItemsApi.listFoodItems).mockResolvedValue([chicken, peanutButter])
+    vi.mocked(mealPlansApi.listMealPlans).mockResolvedValue([])
+
+    const wrapper = mount(MealPlannerView)
+    await flushPromises()
+
+    await selectFoodInPicker(wrapper, 'Chicken Breast')
+    const unitSelect = () => wrapper.findAll('select').at(-1)!
+    expect(unitSelect().findAll('option').map((o) => o.text())).toEqual(['g'])
+
+    await findButtonByText(wrapper, 'Change')!.trigger('click')
+    await selectFoodInPicker(wrapper, 'Peanut Butter')
+    expect(unitSelect().findAll('option').map((o) => o.text())).toEqual(['g', 'tbsp'])
   })
 
   it('groups the food catalog by category', async () => {

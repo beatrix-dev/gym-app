@@ -71,7 +71,13 @@ const recommendation: PlanExerciseRecommendation = {
   rationale: 'Hit top of rep range comfortably — add 2.5kg.',
 }
 
-function findByText(wrapper: ReturnType<typeof mount>, selector: string, text: string) {
+interface TextElement {
+  text(): string
+  trigger(event: string): Promise<void>
+  find(selector: string): TextElement
+}
+
+function findByText(wrapper: { findAll(selector: string): TextElement[] }, selector: string, text: string) {
   return wrapper.findAll(selector).find((el) => el.text().includes(text))
 }
 
@@ -116,7 +122,7 @@ describe('PlannerView', () => {
     expect(wrapper.text()).toContain('Push Day')
     expect(wrapper.text()).not.toContain('Bench Press')
 
-    await findByText(wrapper, 'button', 'Push Day')!.trigger('click')
+    await wrapper.find('[data-day-id="1"]').trigger('click')
     await flushPromises()
 
     expect(plansApi.getDayRecommendations).toHaveBeenCalledWith(1, 1)
@@ -150,6 +156,148 @@ describe('PlannerView', () => {
     expect(plansApi.createPlan).toHaveBeenCalledWith({ name: 'New Plan' })
     expect(wrapper.text()).toContain('New Plan')
     expect(wrapper.text()).toContain('No days yet')
+  })
+
+  it('shows recommended exercises for the split and adds one via the sets modal', async () => {
+    const overheadPress: Exercise = {
+      id: 2,
+      name: 'Overhead Press',
+      muscle_group: 'shoulders',
+      equipment: 'barbell',
+      category: 'compound',
+      is_custom: false,
+      is_public: true,
+      created_by_user_id: null,
+    }
+    const pushDay: WorkoutPlanDay = { ...day, label: 'Push' }
+    const pushPlan: WorkoutPlan = { ...plan, days: [pushDay] }
+
+    vi.mocked(exercisesApi.listExercises).mockResolvedValue([exercises[0]!, overheadPress])
+    vi.mocked(plansApi.listPlans).mockResolvedValue([pushPlan])
+    vi.mocked(plansApi.getDayRecommendations).mockResolvedValue([])
+    vi.mocked(plansApi.addPlanExercise).mockResolvedValue({
+      id: 2,
+      plan_day_id: 1,
+      exercise_order: 2,
+      target_sets: 4,
+      target_reps_min: 6,
+      target_reps_max: 8,
+      exercise: overheadPress,
+    })
+
+    const wrapper = mount(PlannerView)
+    await flushPromises()
+
+    await findByText(wrapper, 'li', 'Push Pull Legs')!.trigger('click')
+    await flushPromises()
+    await wrapper.find('[data-day-id="1"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Recommended for Push')
+    // Bench Press is already on the day, so only Overhead Press should be suggested as a chip.
+    const chips = wrapper.findAll('button').filter((b) => b.text().startsWith('+ '))
+    expect(chips.map((c) => c.text())).toEqual(['+ Overhead Press'])
+
+    await chips[0]!.trigger('click')
+    await flushPromises()
+
+    const dialog = wrapper.find('[role="dialog"]')
+    expect(dialog.exists()).toBe(true)
+
+    const numberInputs = dialog.findAll('input[type="number"]')
+    await numberInputs[0]!.setValue(4)
+    await numberInputs[1]!.setValue(6)
+    await numberInputs[2]!.setValue(8)
+    await dialog.find('form').trigger('submit.prevent')
+    await flushPromises()
+
+    expect(plansApi.addPlanExercise).toHaveBeenCalledWith(1, 1, {
+      exercise_id: 2,
+      exercise_order: 2,
+      target_sets: 4,
+      target_reps_min: 6,
+      target_reps_max: 8,
+    })
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(false)
+  })
+
+  it('opens the sets modal after picking an exercise from the picker and cancels without adding', async () => {
+    vi.mocked(exercisesApi.listExercises).mockResolvedValue(exercises)
+    vi.mocked(plansApi.listPlans).mockResolvedValue([plan])
+    vi.mocked(plansApi.getDayRecommendations).mockResolvedValue([recommendation])
+
+    const wrapper = mount(PlannerView)
+    await flushPromises()
+
+    await findByText(wrapper, 'li', 'Push Pull Legs')!.trigger('click')
+    await flushPromises()
+    await wrapper.find('[data-day-id="1"]').trigger('click')
+    await flushPromises()
+
+    await findByText(wrapper, 'button', 'Bench Press')!.trigger('click')
+    await flushPromises()
+
+    const dialog = wrapper.find('[role="dialog"]')
+    expect(dialog.exists()).toBe(true)
+
+    await findByText(dialog, 'button', 'Cancel')!.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(false)
+    expect(plansApi.addPlanExercise).not.toHaveBeenCalled()
+  })
+
+  it('removes a scheduled day directly from the weekday grid', async () => {
+    // Local copies: component code mutates `plan`/`day` in place, and reusing
+    // the shared fixtures here would leak this test's deletion into others.
+    const localDay: WorkoutPlanDay = { ...day, plan_exercises: [...day.plan_exercises] }
+    const localPlan: WorkoutPlan = { ...plan, days: [localDay] }
+
+    vi.mocked(exercisesApi.listExercises).mockResolvedValue(exercises)
+    vi.mocked(plansApi.listPlans).mockResolvedValue([localPlan])
+    vi.mocked(plansApi.deletePlanDay).mockResolvedValue()
+
+    const wrapper = mount(PlannerView)
+    await flushPromises()
+
+    await findByText(wrapper, 'li', 'Push Pull Legs')!.trigger('click')
+    await flushPromises()
+
+    const dayCard = wrapper.find('[data-day-id="1"]')
+    expect(dayCard.exists()).toBe(true)
+
+    await dayCard.find('button[aria-label="Remove day"]').trigger('click')
+    await flushPromises()
+
+    expect(plansApi.deletePlanDay).toHaveBeenCalledWith(1, 1)
+    expect(wrapper.find('[data-day-id="1"]').exists()).toBe(false)
+  })
+
+  it("reschedules a day's weekday without losing its exercises", async () => {
+    const localDay: WorkoutPlanDay = { ...day, plan_exercises: [...day.plan_exercises] }
+    const localPlan: WorkoutPlan = { ...plan, days: [localDay] }
+
+    vi.mocked(exercisesApi.listExercises).mockResolvedValue(exercises)
+    vi.mocked(plansApi.listPlans).mockResolvedValue([localPlan])
+    vi.mocked(plansApi.getDayRecommendations).mockResolvedValue([])
+    vi.mocked(plansApi.updatePlanDay).mockResolvedValue({ ...localDay, day_of_week: 'wednesday' })
+
+    const wrapper = mount(PlannerView)
+    await flushPromises()
+
+    await findByText(wrapper, 'li', 'Push Pull Legs')!.trigger('click')
+    await flushPromises()
+    await wrapper.find('[data-day-id="1"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Bench Press')
+
+    await wrapper.find('[data-day-id="1"] select[aria-label="Change weekday"]').setValue('wednesday')
+    await flushPromises()
+
+    expect(plansApi.updatePlanDay).toHaveBeenCalledWith(1, 1, { day_of_week: 'wednesday' })
+    // Exercises weren't wiped by the reschedule - it's a PATCH, not delete+recreate.
+    expect(wrapper.text()).toContain('Bench Press')
   })
 
   it('deletes a plan', async () => {

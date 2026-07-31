@@ -13,7 +13,7 @@ import {
   getDailyTotals,
   listMealPlans,
 } from '@/api/mealPlans'
-import type { DailyTotals, FoodCategory, FoodItem, FoodItemCreate, MealPlan, MealType } from '@/types'
+import type { DailyTotals, FoodCategory, FoodItem, FoodItemCreate, FoodUnit, MealPlan, MealType } from '@/types'
 
 const FOOD_CATEGORY_ORDER: FoodCategory[] = ['protein', 'dairy', 'grains', 'produce', 'fats_oils', 'other']
 
@@ -24,6 +24,15 @@ const FOOD_CATEGORY_LABELS: Record<FoodCategory, string> = {
   produce: 'Fruits & Veg',
   fats_oils: 'Fats & Oils',
   other: 'Other',
+}
+
+const FOOD_UNIT_LABELS: Record<FoodUnit, string> = {
+  grams: 'g',
+  ml: 'ml',
+  tbsp: 'tbsp',
+  tsp: 'tsp',
+  cup: 'cup',
+  piece: 'piece',
 }
 
 function localIsoDate(date: Date): string {
@@ -131,7 +140,7 @@ async function ensureTodayPlan(): Promise<MealPlan> {
   return plan
 }
 
-async function handleAddTodayEntry(payload: { foodItemId: number; mealType: MealType | null; quantityGrams: number }) {
+async function handleAddTodayEntry(payload: { foodItemId: number; mealType: MealType | null; quantity: number; unit: FoodUnit }) {
   isAddingTodayEntry.value = true
   error.value = ''
   try {
@@ -139,7 +148,8 @@ async function handleAddTodayEntry(payload: { foodItemId: number; mealType: Meal
     const entry = await addMealPlanEntry(plan.id, {
       food_item_id: payload.foodItemId,
       meal_type: payload.mealType,
-      quantity_grams: payload.quantityGrams,
+      quantity: payload.quantity,
+      unit: payload.unit,
     })
     plan.entries.push(entry)
     await loadTodayTotals()
@@ -224,7 +234,7 @@ async function handleDeletePlan(planId: number) {
   }
 }
 
-async function handleAddPlanEntry(payload: { foodItemId: number; mealType: MealType | null; quantityGrams: number }) {
+async function handleAddPlanEntry(payload: { foodItemId: number; mealType: MealType | null; quantity: number; unit: FoodUnit }) {
   if (!selectedPlan.value) return
   isAddingPlanEntry.value = true
   error.value = ''
@@ -232,7 +242,8 @@ async function handleAddPlanEntry(payload: { foodItemId: number; mealType: MealT
     const entry = await addMealPlanEntry(selectedPlan.value.id, {
       food_item_id: payload.foodItemId,
       meal_type: payload.mealType,
-      quantity_grams: payload.quantityGrams,
+      quantity: payload.quantity,
+      unit: payload.unit,
     })
     selectedPlan.value.entries.push(entry)
     await loadPlanTotals()
@@ -329,7 +340,7 @@ onMounted(loadInitialData)
             >
               <span>
                 <span class="font-medium">{{ entry.food_item.name }}</span>
-                — {{ entry.quantity_grams }}g
+                — {{ entry.quantity }}{{ FOOD_UNIT_LABELS[entry.unit] }}
                 <span v-if="entry.meal_type" class="ml-1 text-xs text-slate-400">({{ entry.meal_type }})</span>
               </span>
               <button class="text-xs text-error hover:opacity-80" @click="handleDeleteTodayEntry(entry.id)">
@@ -411,7 +422,7 @@ onMounted(loadInitialData)
             >
               <span>
                 <span class="font-medium">{{ entry.food_item.name }}</span>
-                — {{ entry.quantity_grams }}g
+                — {{ entry.quantity }}{{ FOOD_UNIT_LABELS[entry.unit] }}
                 <span v-if="entry.meal_type" class="ml-1 text-xs text-slate-400">({{ entry.meal_type }})</span>
               </span>
               <button class="text-xs text-error hover:opacity-80" @click="handleDeletePlanEntry(entry.id)">

@@ -111,6 +111,12 @@ export interface WorkoutPlanDayCreate {
   day_of_week?: DayOfWeek | null
 }
 
+export interface WorkoutPlanDayUpdate {
+  day_order?: number
+  label?: string | null
+  day_of_week?: DayOfWeek | null
+}
+
 export interface WorkoutPlan {
   id: number
   user_id: number
@@ -146,6 +152,19 @@ export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack'
 
 export type FoodCategory = 'protein' | 'dairy' | 'grains' | 'produce' | 'fats_oils' | 'other'
 
+export type FoodUnit = 'grams' | 'ml' | 'tbsp' | 'tsp' | 'cup' | 'piece'
+
+export interface FoodItemUnit {
+  id: number
+  unit: FoodUnit
+  grams_per_unit: number
+}
+
+export interface FoodItemUnitCreate {
+  unit: FoodUnit
+  grams_per_unit: number
+}
+
 export interface FoodItem {
   id: number
   name: string
@@ -156,6 +175,7 @@ export interface FoodItem {
   fat_per_100g: number | null
   is_public: boolean
   created_by_user_id: number | null
+  units: FoodItemUnit[]
 }
 
 export interface FoodItemCreate {
@@ -166,20 +186,23 @@ export interface FoodItemCreate {
   carbs_per_100g?: number | null
   fat_per_100g?: number | null
   is_public?: boolean
+  units?: FoodItemUnitCreate[]
 }
 
 export interface MealPlanEntry {
   id: number
   meal_plan_id: number
   meal_type: MealType | null
-  quantity_grams: number
+  quantity: number
+  unit: FoodUnit
   food_item: FoodItem
 }
 
 export interface MealPlanEntryCreate {
   food_item_id: number
   meal_type?: MealType | null
-  quantity_grams: number
+  quantity: number
+  unit: FoodUnit
 }
 
 export interface MealPlan {

@@ -2,7 +2,20 @@ from datetime import date
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.models.meal import FoodCategory, MealType
+from app.models.meal import FoodCategory, FoodUnit, MealType
+
+
+class FoodItemUnitCreate(BaseModel):
+    unit: FoodUnit
+    grams_per_unit: float = Field(gt=0)
+
+
+class FoodItemUnitOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    unit: FoodUnit
+    grams_per_unit: float
 
 
 class FoodItemCreate(BaseModel):
@@ -13,6 +26,7 @@ class FoodItemCreate(BaseModel):
     carbs_per_100g: float | None = None
     fat_per_100g: float | None = None
     is_public: bool = False
+    units: list[FoodItemUnitCreate] = []
 
 
 class FoodItemUpdate(BaseModel):
@@ -37,18 +51,21 @@ class FoodItemOut(BaseModel):
     fat_per_100g: float | None = None
     is_public: bool
     created_by_user_id: int | None = None
+    units: list[FoodItemUnitOut] = []
 
 
 class MealPlanEntryCreate(BaseModel):
     food_item_id: int
     meal_type: MealType | None = None
-    quantity_grams: float = Field(gt=0)
+    quantity: float = Field(gt=0)
+    unit: FoodUnit = FoodUnit.grams
 
 
 class MealPlanEntryUpdate(BaseModel):
     food_item_id: int | None = None
     meal_type: MealType | None = None
-    quantity_grams: float | None = Field(default=None, gt=0)
+    quantity: float | None = Field(default=None, gt=0)
+    unit: FoodUnit | None = None
 
 
 class MealPlanEntryOut(BaseModel):
@@ -57,7 +74,8 @@ class MealPlanEntryOut(BaseModel):
     id: int
     meal_plan_id: int
     meal_type: MealType | None = None
-    quantity_grams: float
+    quantity: float
+    unit: FoodUnit
     food_item: FoodItemOut
 
 
