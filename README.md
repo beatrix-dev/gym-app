@@ -95,15 +95,15 @@ Vue 3 + TypeScript + Vite, talking to the FastAPI backend locally.
 
 **Deliverable:** stays decoupled from the workout side except sharing the `users` table — good chance to practice clean module boundaries in one codebase.
 
-### Phase 5 — GKE deployment ⬜ (2–3 sessions)
+### Phase 5 — GKE deployment ✅ (2–3 sessions)
 
-Bring in infra, reusing Terraform from the grocery app:
+Own Terraform root config in `terraform/`, sourcing shared modules from `infrastructure-terraform-gcp` (git-pinned, not copied):
 
-- [ ] Cloud SQL for MySQL (Terraform)
-- [ ] Dockerize frontend/backend
-- [ ] Artifact Registry
-- [ ] GKE deployment manifests (or Kustomize)
-- [ ] Ingress (GCE ingress or nginx)
+- [x] Cloud SQL for MySQL (Terraform) — public IP, SSL-only, reachable only via a Cloud SQL Auth Proxy sidecar authenticated through Workload Identity
+- [x] Dockerize frontend/backend
+- [x] Artifact Registry
+- [x] GKE deployment manifests (Kustomize) — `k8s/`
+- [x] Frontend egress via a plain `LoadBalancer` Service (not an Ingress resource — no path-based routing/TLS termination layer yet)
 
 ### Phase 6 — CI/CD + polish ⬜ (1–2 sessions)
 
