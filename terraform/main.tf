@@ -4,7 +4,7 @@
 # ---------------------------------------------------------------------------
 locals {
   modules_source = "git::https://github.com/beatrix-dev/infrastructure-terraform-gcp.git"
-  modules_ref    = "v1.0.1"
+  modules_ref    = "v1.0.2"
 }
 
 # ---------------------------------------------------------------------------
@@ -62,6 +62,39 @@ module "gke" {
   }
 
   depends_on = [module.vpc]
+}
+
+# ---------------------------------------------------------------------------
+# Workload node pool — on-demand (not spot), autoscaling so a node loss or a
+# temporary CPU squeeze from GKE's own system pods doesn't strand app pods
+# in Pending the way it did on the embedded default pool.
+# ---------------------------------------------------------------------------
+module "node_pools" {
+  source = "${local.modules_source}//modules/node-pools?ref=${local.modules_ref}"
+
+  name_prefix                = var.cluster_name
+  project_id                 = var.project_id
+  gcp_location               = local.zone
+  cluster_name               = module.gke.cluster_name
+  node_service_account_email = module.gke.node_service_account_email
+  labels                     = local.common_labels
+
+  node_pools = {
+    standard = {
+      machine_type       = "e2-medium"
+      disk_size_gb       = 30
+      disk_type          = "pd-standard"
+      initial_node_count = 2
+      min_node_count     = 2
+      max_node_count     = 4
+      spot               = false
+      labels             = {}
+      taints             = []
+      oauth_scopes       = ["https://www.googleapis.com/auth/cloud-platform"]
+    }
+  }
+
+  depends_on = [module.gke]
 }
 
 # ---------------------------------------------------------------------------
