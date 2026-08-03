@@ -33,7 +33,14 @@ variable "db_tier" {
 }
 
 variable "authorized_network_cidr" {
-  description = "CIDR (e.g. \"203.0.113.4/32\") allowed to reach the GKE control plane — set to the operator's current public IP before applying"
+  description = <<-EOT
+    CIDR allowed to reach the GKE control plane. Set to "0.0.0.0/0" (public)
+    because GitHub Actions publishes 7,000+ runner IP ranges — far more than
+    GKE's 50-entry master_authorized_networks limit — so a real allowlist
+    covering CI isn't possible. Access still requires a valid GCP IAM /
+    Workload Identity Federation token plus Kubernetes RBAC; this only
+    removes the network-level layer on top of that.
+  EOT
   type        = string
 }
 
