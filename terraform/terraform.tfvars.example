@@ -1,0 +1,15 @@
+# Real values are set as variables on the "gym-app-gcp" Terraform Cloud
+# workspace (org "Allthree"), not committed here. This file documents what's
+# expected — copy it to terraform.tfvars for local `terraform plan` only if
+# you're not going through TFC.
+
+project_id = "your-gcp-project-id"
+
+# curl ifconfig.me  ->  append /32
+authorized_network_cidr = "203.0.113.4/32"
+
+# Optional — defaults shown
+# region        = "us-central1"
+# cluster_name  = "gym-tracker"
+# repository_id = "gym-tracker"
+# db_tier       = "db-f1-micro"
