@@ -32,7 +32,9 @@ module "vpc" {
 }
 
 # ---------------------------------------------------------------------------
-# GKE — private nodes, public endpoint restricted to the operator's IP.
+# GKE — private nodes, public endpoint open to 0.0.0.0/0 (see
+# authorized_network_cidr in variables.tf for why). Protected by GCP IAM /
+# Workload Identity Federation + Kubernetes RBAC, not a network allowlist.
 # ---------------------------------------------------------------------------
 module "gke" {
   source = "${local.modules_source}//modules/gke?ref=${local.modules_ref}"
@@ -55,7 +57,7 @@ module "gke" {
     master_authorized_networks = [
       {
         cidr_block   = var.authorized_network_cidr
-        display_name = "operator"
+        display_name = "public-ci-and-operator"
       }
     ]
     deletion_protection = false
