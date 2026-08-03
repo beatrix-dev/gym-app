@@ -15,6 +15,8 @@ spec:
           restartPolicy: Always
           args:
             - "--port=3306"
+            - "--health-check"
+            - "--http-address=0.0.0.0"
             - "$(CLOUDSQL_CONNECTION_NAME)"
           env:
             - name: CLOUDSQL_CONNECTION_NAME
@@ -23,16 +25,17 @@ spec:
                   name: backend-config
                   key: cloudsql-connection-name
           startupProbe:
-            tcpSocket:
-              port: 3306
+            httpGet:
+              path: /startup
+              port: 9090
             periodSeconds: 2
             failureThreshold: 30
           resources:
             requests:
-              cpu: 10m
+              cpu: 20m
               memory: 32Mi
             limits:
-              cpu: 100m
+              cpu: 500m
               memory: 128Mi
       containers:
         - name: migrate

@@ -4,7 +4,7 @@
 # ---------------------------------------------------------------------------
 locals {
   modules_source = "git::https://github.com/beatrix-dev/infrastructure-terraform-gcp.git"
-  modules_ref    = "v1.0.0"
+  modules_ref    = "v1.0.1"
 }
 
 # ---------------------------------------------------------------------------
