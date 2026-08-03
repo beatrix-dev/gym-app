@@ -1,0 +1,130 @@
+name: Build and Deploy to GKE
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  id-token: write # required for Workload Identity Federation
+
+env:
+  GAR_LOCATION: us-central1-docker.pkg.dev/terraform-498709/gym-tracker
+  GKE_CLUSTER: gym-tracker
+  GKE_ZONE: us-central1-a
+
+jobs:
+  frontend-checks:
+    name: Frontend typecheck, build, test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - run: npm ci
+        working-directory: frontend
+
+      - name: Typecheck + build
+        run: npm run build
+        working-directory: frontend
+
+      - name: Test
+        run: npm run test
+        working-directory: frontend
+
+  build-push-deploy:
+    name: Build, push, and deploy
+    needs: frontend-checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
+
+      - name: Set image tag
+        run: echo "TAG=${GITHUB_SHA::8}" >> "$GITHUB_ENV"
+
+      - name: Build and push backend
+        run: |
+          docker build \
+            -t "$GAR_LOCATION/gym-tracker-backend:$TAG" \
+            -t "$GAR_LOCATION/gym-tracker-backend:latest" \
+            .
+          docker push "$GAR_LOCATION/gym-tracker-backend:$TAG"
+          docker push "$GAR_LOCATION/gym-tracker-backend:latest"
+
+      - name: Build and push frontend
+        run: |
+          docker build \
+            --build-arg VITE_API_BASE_URL="" \
+            -t "$GAR_LOCATION/gym-tracker-frontend:$TAG" \
+            -t "$GAR_LOCATION/gym-tracker-frontend:latest" \
+            ./frontend
+          docker push "$GAR_LOCATION/gym-tracker-frontend:$TAG"
+          docker push "$GAR_LOCATION/gym-tracker-frontend:latest"
+
+      - uses: google-github-actions/get-gke-credentials@v2
+        with:
+          cluster_name: ${{ env.GKE_CLUSTER }}
+          location: ${{ env.GKE_ZONE }}
+
+      - name: Install kustomize
+        run: |
+          KUSTOMIZE_VERSION=5.3.0
+          curl -sL "https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv${KUSTOMIZE_VERSION}/kustomize_v${KUSTOMIZE_VERSION}_linux_amd64.tar.gz" \
+            | tar xz -C /tmp
+          sudo mv /tmp/kustomize /usr/local/bin/kustomize
+
+      - name: Ensure namespace exists
+        run: kubectl apply -f k8s/namespace.yaml
+
+      # backend-secrets is deliberately excluded from source control — kept in
+      # sync here from GitHub secrets so CI can own the full deploy.
+      - name: Apply backend-secrets
+        run: |
+          kubectl create secret generic backend-secrets \
+            --namespace=gym-tracker \
+            --from-literal=database-url="${{ secrets.DATABASE_URL }}" \
+            --from-literal=secret-key="${{ secrets.APP_SECRET_KEY }}" \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      # Job specs are immutable, so the old migrate Job must be gone before
+      # the kustomize-applied recreate below can pick up the newly pinned
+      # image tag — kubectl apply -k . would otherwise fail on the Job.
+      - name: Delete previous migrate Job
+        run: kubectl delete job migrate -n gym-tracker --ignore-not-found
+
+      - name: Pin image tags and deploy
+        run: |
+          cd k8s
+          kustomize edit set image \
+            "gym-tracker-backend=$GAR_LOCATION/gym-tracker-backend:$TAG" \
+            "gym-tracker-frontend=$GAR_LOCATION/gym-tracker-frontend:$TAG"
+          kubectl apply -k .
+
+      - name: Wait for migrations to complete
+        run: kubectl wait --for=condition=complete job/migrate -n gym-tracker --timeout=180s
+
+      - name: Verify rollout
+        run: |
+          kubectl rollout status deployment/backend -n gym-tracker --timeout=180s
+          kubectl rollout status deployment/frontend -n gym-tracker --timeout=180s
+
+      - name: Smoke test
+        run: |
+          LB_IP=$(kubectl get svc frontend -n gym-tracker -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+          curl -sf "http://$LB_IP/health" | grep -q '"db":"connected"'
