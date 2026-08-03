@@ -4,9 +4,7 @@ metadata:
   name: gym-app-backend
   namespace: gym-tracker
   annotations:
-    # Replace <PROJECT_ID> after `terraform apply` — must match the SA email
-    # in the terraform/outputs.tf `backend_service_account_email` output.
-    iam.gke.io/gcp-service-account: gym-tracker-backend-sa@<PROJECT_ID>.iam.gserviceaccount.com
+    iam.gke.io/gcp-service-account: gym-tracker-backend-sa@terraform-498709.iam.gserviceaccount.com
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -18,9 +16,7 @@ data:
   # frontend's nginx proxy — same-origin requests through that proxy aren't
   # subject to CORS at all, so the default here is rarely exercised in prod.
   allowed-origins: "http://localhost:5173"
-  # Replace after `terraform apply` — value of the `db_connection_name` output
-  # (project:region:instance), consumed by the Cloud SQL Auth Proxy below.
-  cloudsql-connection-name: "<PROJECT_ID>:<REGION>:gym-tracker-db"
+  cloudsql-connection-name: "terraform-498709:us-central1:gym-tracker-db"
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -50,6 +46,8 @@ spec:
           restartPolicy: Always
           args:
             - "--port=3306"
+            - "--health-check"
+            - "--http-address=0.0.0.0"
             - "$(CLOUDSQL_CONNECTION_NAME)"
           env:
             - name: CLOUDSQL_CONNECTION_NAME
@@ -58,16 +56,17 @@ spec:
                   name: backend-config
                   key: cloudsql-connection-name
           startupProbe:
-            tcpSocket:
-              port: 3306
+            httpGet:
+              path: /startup
+              port: 9090
             periodSeconds: 2
             failureThreshold: 30
           resources:
             requests:
-              cpu: 10m
+              cpu: 20m
               memory: 32Mi
             limits:
-              cpu: 100m
+              cpu: 500m
               memory: 128Mi
       containers:
         - name: backend

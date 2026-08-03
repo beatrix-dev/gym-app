@@ -7,12 +7,10 @@ resources:
   - frontend.yaml
   - migrate-job.yaml
 
-# Replace <PROJECT_ID> (and region, if not us-central1) after `terraform
-# apply` — the real prefix is the `artifact_registry_repository_url` output.
 images:
   - name: gym-tracker-backend
-    newName: us-central1-docker.pkg.dev/<PROJECT_ID>/gym-tracker/gym-tracker-backend
+    newName: us-central1-docker.pkg.dev/terraform-498709/gym-tracker/gym-tracker-backend
     newTag: latest
   - name: gym-tracker-frontend
-    newName: us-central1-docker.pkg.dev/<PROJECT_ID>/gym-tracker/gym-tracker-frontend
+    newName: us-central1-docker.pkg.dev/terraform-498709/gym-tracker/gym-tracker-frontend
     newTag: latest
