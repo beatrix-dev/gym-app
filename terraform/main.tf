@@ -88,7 +88,7 @@ module "node_pools" {
       disk_type          = "pd-standard"
       initial_node_count = 2
       min_node_count     = 2
-      max_node_count     = 4
+      max_node_count     = 6
       spot               = false
       labels             = {}
       taints             = []
