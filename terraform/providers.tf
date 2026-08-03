@@ -4,7 +4,7 @@ terraform {
   cloud {
     organization = "Allthree"
     workspaces {
-      name = "gym-app-gcp"
+      name = "gym-app"
     }
   }
 
