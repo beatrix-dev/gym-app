@@ -105,11 +105,11 @@ Own Terraform root config in `terraform/`, sourcing shared modules from `infrast
 - [x] GKE deployment manifests (Kustomize) — `k8s/`
 - [x] Frontend egress via a plain `LoadBalancer` Service (not an Ingress resource — no path-based routing/TLS termination layer yet)
 
-### Phase 6 — CI/CD + polish ⬜ (1–2 sessions)
+### Phase 6 — CI/CD + polish ✅ (1–2 sessions)
 
-- [ ] GitHub Actions build/push
-- [ ] Basic health checks in CI
-- [ ] Blog post write-up
+- [x] GitHub Actions build/push
+- [x] Basic health checks in CI
+- [x] Blog post write-up — [`docs/blog-post.md`](docs/blog-post.md)
 
 ## Contributing to this tracker
 

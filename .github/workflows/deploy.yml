@@ -37,7 +37,7 @@ jobs:
         run: npm run test
         working-directory: frontend
 
-  build-push-deploy:
+  build-push-deploy: # Gate job on frontend-checks to avoid deploying broken frontend
     name: Build, push, and deploy
     needs: frontend-checks
     runs-on: ubuntu-latest
