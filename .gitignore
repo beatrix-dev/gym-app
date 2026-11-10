@@ -54,8 +54,7 @@ CLAUDE.local.md
 !.claude/skills/
 !.claude/skills/**
 
-# Terraform
-terraform/.terraform/
-terraform/*.tfvars
-!terraform/*.tfvars.example
-terraform/*.tfplan
+# CDK / infrastructure
+infrastructure/target/
+infrastructure/cdk.out/
+cdk.context.json

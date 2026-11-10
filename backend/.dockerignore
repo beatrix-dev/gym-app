@@ -1,8 +1,4 @@
 venv/
-frontend/
-terraform/
-k8s/
-docs/
 .git/
 .env
 __pycache__/
