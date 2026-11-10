@@ -20,8 +20,8 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     """Upgrade schema."""
-    # Existing rows have no Cognito identity, so the column cannot be added NOT NULL
-    # to a populated table; users are recreated on first Cognito sign-in.
+    # Assumes an empty `users` table (fresh database, per the AWS migration design):
+    # existing rows would have no cognito_sub to satisfy NOT NULL.
     op.drop_column('users', 'password_hash')
     op.add_column('users', sa.Column('cognito_sub', sa.String(64), nullable=False))
     op.create_index('ix_users_cognito_sub', 'users', ['cognito_sub'], unique=True)

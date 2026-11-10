@@ -27,8 +27,10 @@ def get_current_user(
     except InvalidToken:
         raise credentials_error
 
+    # Native Cognito users could claim any (unverified) email, so require a Google identity.
+    is_google = any(i.get("providerName") == "Google" for i in claims.get("identities") or [])
     email = claims.get("email", "")
-    if email.strip().lower() not in settings.allowed_emails_set:
+    if not is_google or email.strip().lower() not in settings.allowed_emails_set:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account not allowed")
 
     user = db.query(User).filter(User.cognito_sub == claims["sub"]).first()

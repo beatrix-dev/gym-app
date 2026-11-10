@@ -33,7 +33,7 @@ def verify_id_token(token: str) -> dict:
             audience=settings.cognito_client_id,
             issuer=issuer,
             # ID tokens carry at_hash; python-jose rejects it unless an access token is supplied.
-            options={"verify_at_hash": False},
+            options={"verify_at_hash": False, "require_aud": True, "require_exp": True, "require_iss": True},
         )
     except JWTError as exc:
         raise InvalidToken(str(exc)) from exc

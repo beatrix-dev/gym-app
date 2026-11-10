@@ -87,7 +87,7 @@ def make_token(monkeypatch):
     monkeypatch.setattr(settings, "cognito_client_id", CLIENT_ID)
     monkeypatch.setattr(settings, "allowed_emails", "owner@example.com")
 
-    def _make_token(**overrides) -> str:
+    def _make_token(*, key=None, drop=(), **overrides) -> str:
         claims = {
             "iss": ISSUER,
             "aud": CLIENT_ID,
@@ -97,8 +97,12 @@ def make_token(monkeypatch):
             "name": "Owner",
             "exp": int(time.time()) + 300,
             "at_hash": "x",
+            "identities": [{"providerName": "Google", "userId": "123", "providerType": "Google"}],
         }
         claims.update(overrides)
-        return jwt.encode(claims, private_pem.decode(), algorithm="RS256", headers={"kid": KID})
+        for name in drop:
+            claims.pop(name, None)
+        return jwt.encode(claims, key or private_pem.decode(), algorithm="RS256", headers={"kid": KID})
 
+    _make_token.public_pem = public_pem.decode()
     return _make_token
