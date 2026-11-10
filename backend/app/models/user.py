@@ -9,7 +9,7 @@ class User(Base):
 
     id = Column(BigInteger, primary_key=True, autoincrement=True)
     email = Column(String(255), unique=True, nullable=False, index=True)
-    password_hash = Column(String(255), nullable=False)
+    cognito_sub = Column(String(64), unique=True, nullable=False, index=True)
     display_name = Column(String(100))
     bodyweight_kg = Column(DECIMAL(5, 2))
     height_cm = Column(DECIMAL(5, 2))

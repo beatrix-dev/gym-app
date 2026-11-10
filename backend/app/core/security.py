@@ -1,33 +1,42 @@
-
-from datetime import datetime, timedelta, timezone
+import json
+import urllib.request
+from functools import lru_cache
 
 from jose import JWTError, jwt
-from pwdlib import PasswordHash
-from pwdlib.hashers.bcrypt import BcryptHasher
 
 from app.core.config import settings
 
-password_hasher = PasswordHash((BcryptHasher(),))
+
+class InvalidToken(Exception):
+    pass
 
 
-def hash_password(password: str) -> str:
-    return password_hasher.hash(password)
+@lru_cache
+def fetch_jwks() -> dict:
+    """Cognito's public signing keys; cached for the life of the process."""
+    url = (
+        f"https://cognito-idp.{settings.cognito_region}.amazonaws.com/"
+        f"{settings.cognito_user_pool_id}/.well-known/jwks.json"
+    )
+    with urllib.request.urlopen(url, timeout=5) as response:
+        return json.load(response)
 
 
-def verify_password(plain_password: str, password_hash: str) -> bool:
-    return password_hasher.verify(plain_password, password_hash)
-
-
-def create_access_token(subject: str) -> str:
-    expire = datetime.now(timezone.utc) + timedelta(minutes=settings.access_token_expire_minutes)
-    payload = {"sub": subject, "exp": expire}
-    return jwt.encode(payload, settings.secret_key, algorithm=settings.algorithm)
-
-
-def decode_access_token(token: str) -> str | None:
-    """Returns the subject (user id as str) if the token is valid, else None."""
+def verify_id_token(token: str) -> dict:
+    """Returns the claims of a valid Cognito ID token, else raises InvalidToken."""
+    issuer = f"https://cognito-idp.{settings.cognito_region}.amazonaws.com/{settings.cognito_user_pool_id}"
     try:
-        payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
-    except JWTError:
-        return None
-    return payload.get("sub")
+        claims = jwt.decode(
+            token,
+            fetch_jwks(),
+            algorithms=["RS256"],
+            audience=settings.cognito_client_id,
+            issuer=issuer,
+            # ID tokens carry at_hash; python-jose rejects it unless an access token is supplied.
+            options={"verify_at_hash": False},
+        )
+    except JWTError as exc:
+        raise InvalidToken(str(exc)) from exc
+    if claims.get("token_use") != "id":
+        raise InvalidToken("Not an ID token")
+    return claims
