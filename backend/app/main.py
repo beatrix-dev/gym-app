@@ -1,4 +1,4 @@
-from fastapi import Depends, FastAPI
+from fastapi import APIRouter, Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -17,17 +17,29 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(auth.router)
-app.include_router(exercises.router)
-app.include_router(food_items.router)
-app.include_router(meal_plans.router)
-app.include_router(workout_plans.router)
-app.include_router(workout_sessions.router)
+api = APIRouter(prefix="/api")
+for router in (
+    auth.router,
+    exercises.router,
+    food_items.router,
+    meal_plans.router,
+    workout_plans.router,
+    workout_sessions.router,
+):
+    api.include_router(router)
 
 
-@app.get("/health")
-def health_check(db: Session = Depends(get_db)):
-    """Proves the API can reach MySQL - the same kind of check
-    the ALB target group would hit in a real deployment."""
+@api.get("/health")
+def health_check():
+    """Liveness probe for the ALB target group - deliberately does not touch the DB."""
+    return {"status": "ok"}
+
+
+@api.get("/health/db")
+def health_check_db(db: Session = Depends(get_db)):
+    """Readiness check proving the API can reach MySQL."""
     db.execute(text("SELECT 1"))
     return {"status": "ok", "db": "connected"}
+
+
+app.include_router(api)

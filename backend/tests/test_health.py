@@ -31,8 +31,18 @@ app.dependency_overrides[get_db] = override_get_db
 client = TestClient(app)
 
 
-def test_health_check_reports_db_connected():
-    response = client.get("/health")
+def test_health_does_not_touch_db():
+    app.dependency_overrides.pop(get_db, None)  # no DB available
+    try:
+        assert client.get("/api/health").json() == {"status": "ok"}
+    finally:
+        app.dependency_overrides[get_db] = override_get_db
 
-    assert response.status_code == 200
-    assert response.json() == {"status": "ok", "db": "connected"}
+
+def test_health_db_reports_connected():
+    assert client.get("/api/health/db").json() == {"status": "ok", "db": "connected"}
+
+
+def test_routers_are_under_api_prefix():
+    assert client.get("/exercises").status_code == 404
+    assert client.get("/api/exercises").status_code == 401
