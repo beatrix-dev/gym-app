@@ -6,7 +6,6 @@ on:
 
 permissions:
   contents: read
-  id-token: write # required for GitHub OIDC -> AWS role assumption
 
 jobs:
   backend-tests:
@@ -83,6 +82,9 @@ jobs:
     # Gate on all test jobs to avoid deploying anything broken.
     needs: [backend-tests, frontend-checks, infra-tests]
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # required for GitHub OIDC -> AWS role assumption
     steps:
       - uses: actions/checkout@v4
 

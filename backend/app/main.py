@@ -31,7 +31,7 @@ for router in (
 
 @api.get("/health")
 def health_check():
-    """Liveness probe for the ALB target group - deliberately does not touch the DB."""
+    """Liveness probe for the ECS container health check - deliberately does not touch the DB."""
     return {"status": "ok"}
 
 
