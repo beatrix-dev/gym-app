@@ -70,4 +70,38 @@ describe('apiClient', () => {
     await expect(apiClient.get('/exercises')).rejects.toThrow()
     expect(adapter).toHaveBeenCalledTimes(1)
   })
+
+  it('retries a POST on 503, since the request never reached a healthy target', async () => {
+    adapter
+      .mockImplementationOnce((config) => failOrSucceed(config, 503))
+      .mockImplementationOnce((config) => failOrSucceed(config, 200))
+
+    const request = apiClient.post('/sets', {})
+    await vi.advanceTimersByTimeAsync(3000)
+    await request
+
+    expect(adapter).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not retry a POST on 504, since the backend may have committed', async () => {
+    adapter.mockImplementation((config) => failOrSucceed(config, 504))
+
+    const assertion = expect(apiClient.post('/sets', {})).rejects.toThrow()
+    await vi.advanceTimersByTimeAsync(3000)
+    await assertion
+
+    expect(adapter).toHaveBeenCalledTimes(1)
+  })
+
+  it.each([502, 504])('retries a GET on %i', async (status) => {
+    adapter
+      .mockImplementationOnce((config) => failOrSucceed(config, status))
+      .mockImplementationOnce((config) => failOrSucceed(config, 200))
+
+    const request = apiClient.get('/exercises')
+    await vi.advanceTimersByTimeAsync(3000)
+    await request
+
+    expect(adapter).toHaveBeenCalledTimes(2)
+  })
 })
