@@ -29,6 +29,16 @@ export const useAuthStore = defineStore('auth', () => {
     }
     const manager = getUserManager()
     oidcUser.value = await manager.getUser()
+    // oidc-client-ts schedules no renewal for an already-expired token, so use
+    // the refresh token now instead of sending the user back to login.
+    if (oidcUser.value?.expired && oidcUser.value.refresh_token) {
+      try {
+        oidcUser.value = await manager.signinSilent()
+      } catch {
+        await manager.removeUser()
+        clearSession()
+      }
+    }
     manager.events.addUserLoaded((loaded) => {
       oidcUser.value = loaded
     })

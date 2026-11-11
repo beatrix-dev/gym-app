@@ -12,6 +12,7 @@ const manager = vi.hoisted(() => ({
   removeUser: vi.fn(),
   signinRedirect: vi.fn(),
   signinRedirectCallback: vi.fn(),
+  signinSilent: vi.fn(),
   events: {
     addUserLoaded: vi.fn(),
     addUserUnloaded: vi.fn(),
@@ -72,6 +73,31 @@ describe('auth store', () => {
     const store = useAuthStore()
     await store.init()
     expect(store.isAuthenticated()).toBe(false)
+  })
+
+  it('refreshes an expired stored user when a refresh token is available', async () => {
+    manager.getUser.mockResolvedValue({ expired: true, refresh_token: 'refresh' })
+    manager.signinSilent.mockResolvedValue(validOidcUser)
+    const store = useAuthStore()
+    await store.init()
+    expect(manager.signinSilent).toHaveBeenCalled()
+    expect(store.isAuthenticated()).toBe(true)
+  })
+
+  it('drops the session without throwing when the silent refresh fails', async () => {
+    manager.getUser.mockResolvedValue({ expired: true, refresh_token: 'refresh' })
+    manager.signinSilent.mockRejectedValue(new Error('refresh token expired'))
+    const store = useAuthStore()
+    await expect(store.init()).resolves.toBeUndefined()
+    expect(manager.removeUser).toHaveBeenCalled()
+    expect(store.isAuthenticated()).toBe(false)
+  })
+
+  it('does not attempt a refresh for an expired user without a refresh token', async () => {
+    manager.getUser.mockResolvedValue({ expired: true })
+    const store = useAuthStore()
+    await store.init()
+    expect(manager.signinSilent).not.toHaveBeenCalled()
   })
 
   it('signIn starts the redirect carrying the target path as state', async () => {
