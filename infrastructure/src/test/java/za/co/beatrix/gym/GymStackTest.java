@@ -59,7 +59,7 @@ class GymStackTest {
 
     @Test
     void databaseAcceptsMysqlOnlyFromServiceSecurityGroup() {
-        template.resourceCountIs("AWS::EC2::SecurityGroupIngress", 1);
+        template.resourceCountIs("AWS::EC2::SecurityGroupIngress", 2);
         template.hasResourceProperties(
                 "AWS::EC2::SecurityGroupIngress",
                 Match.objectLike(Map.of(
@@ -118,5 +118,49 @@ class GymStackTest {
     private static Matcher containerWith(String property, Object matcher) {
         return Match.objectLike(Map.of(
                 "ContainerDefinitions", List.of(Match.objectLike(Map.of(property, matcher)))));
+    }
+
+    @Test
+    void appClientIsGoogleOnlyCodeGrantWithoutPasswordFlows() {
+        template.hasResourceProperties(
+                "AWS::Cognito::UserPoolClient",
+                Match.objectLike(Map.of(
+                        "SupportedIdentityProviders", List.of("Google"),
+                        "GenerateSecret", false,
+                        "AllowedOAuthFlows", List.of("code"),
+                        "ExplicitAuthFlows", List.of("ALLOW_REFRESH_TOKEN_AUTH"))));
+    }
+
+    @Test
+    void backendAcceptsApiPortOnlyFromVpcLinkSecurityGroup() {
+        template.hasResourceProperties(
+                "AWS::EC2::SecurityGroupIngress",
+                Match.objectLike(Map.of(
+                        "IpProtocol", "tcp",
+                        "FromPort", 8100,
+                        "ToPort", 8100,
+                        "GroupId",
+                        Map.of("Fn::GetAtt", List.of(Match.stringLikeRegexp("^BackendSecurityGroup"), "GroupId")),
+                        "SourceSecurityGroupId",
+                        Map.of("Fn::GetAtt", List.of(Match.stringLikeRegexp("^ApiVpcLinkSecurityGroup"), "GroupId")))));
+    }
+
+    @Test
+    void apiIntegratesThroughVpcLink() {
+        template.hasResourceProperties(
+                "AWS::ApiGatewayV2::Integration", Match.objectLike(Map.of("ConnectionType", "VPC_LINK")));
+    }
+
+    @Test
+    void onlyHealthRoutesAreUnauthenticated() {
+        template.resourceCountIs("AWS::ApiGatewayV2::Route", 3);
+        template.hasResourceProperties(
+                "AWS::ApiGatewayV2::Route",
+                Match.objectLike(Map.of("RouteKey", "ANY /api/{proxy+}", "AuthorizationType", "JWT")));
+        for (String route : List.of("GET /api/health", "GET /api/health/db")) {
+            template.hasResourceProperties(
+                    "AWS::ApiGatewayV2::Route",
+                    Match.objectLike(Map.of("RouteKey", route, "AuthorizationType", "NONE")));
+        }
     }
 }
