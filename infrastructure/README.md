@@ -1,5 +1,8 @@
 # Infrastructure (CDK, Java)
 
+> **Do not merge or push this branch to `main` until the one-time bootstrap below is complete.** Merging is a push
+> to `main`, which triggers the deploy job, and that job needs the `GymCi` role and the GitHub variables.
+
 Three stacks, all in `za.co.beatrix.gym`:
 
 | Stack | Region | Purpose |
@@ -50,6 +53,9 @@ Console (APIs & Services > Credentials) create an OAuth client of type "Web appl
 
 (This matches the `GoogleRedirectUri` stack output.) Keep the client ID and secret.
 
+On the OAuth consent screen, either publish the app, or (if left in "Testing") add yourself and any account you
+want to test the "not allowed" message with as test users. Otherwise Google blocks them before they reach the app.
+
 ### 3. Store the Google client secret
 
 It must exist in Secrets Manager (eu-west-1) before `Gym` is deployed:
@@ -95,9 +101,9 @@ Note the `DeployRoleArn` output. Then in the GitHub repo (Settings > Secrets and
 Gotcha: an AWS account allows only one GitHub OIDC provider. If one already exists, the `GymCi` deploy fails.
 Either delete the unused provider (IAM > Identity providers) or adapt `CiStack` to import the existing one.
 
-### 6. Deploy the app
+### 6. Deploy the app (locally)
 
-Either push to `main` (CI runs `cdk deploy Gym GymCertificate`) or run it locally:
+The first `Gym` deploy is done locally only:
 
 ```sh
 npx aws-cdk@2 deploy Gym GymCertificate "${CTX[@]}"
@@ -105,15 +111,21 @@ npx aws-cdk@2 deploy Gym GymCertificate "${CTX[@]}"
 
 ### 7. Point DNS at CloudFront
 
-Add `app CNAME <CloudFrontDomain>` at the registrar, using the `CloudFrontDomain` stack output.
+Add `app CNAME <CloudFrontDomain>` at the registrar, using the `CloudFrontDomain` stack output. Wait for DNS to
+resolve (`dig app.beatrix.co.za`) before continuing.
 
 ### 8. Verify
 
 - `https://app.beatrix.co.za/meals` loads the SPA.
-- `https://app.beatrix.co.za/api/nope` returns 401 JSON, not HTML.
+- `https://app.beatrix.co.za/api/nope` returns a JSON 401, not the SPA.
 - "Sign in with Google" with an allowed account lands on `/log`; any other account sees the not-allowed message.
 - After about 10 minutes idle, Aurora reaches 0 ACU (CloudWatch `ServerlessDatabaseCapacity`); the next request
   shows "Waking up..." and then succeeds.
+- After more than 5 minutes idle, sign in again and confirm the "Waking up..." banner, then success.
+
+### 9. Hand over to CI
+
+Now merge/push to `main`; CI will deploy and smoke-test `https://app.beatrix.co.za/api/health/db`.
 
 ## Stack outputs (`Gym`)
 
