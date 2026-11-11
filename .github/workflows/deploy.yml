@@ -1,4 +1,4 @@
-name: Build and Deploy to GKE
+name: Test and Deploy to AWS
 
 on:
   push:
@@ -6,14 +6,27 @@ on:
 
 permissions:
   contents: read
-  id-token: write # required for Workload Identity Federation
-
-env:
-  GAR_LOCATION: us-central1-docker.pkg.dev/terraform-498709/gym-tracker
-  GKE_CLUSTER: gym-tracker
-  GKE_ZONE: us-central1-a
+  id-token: write # required for GitHub OIDC -> AWS role assumption
 
 jobs:
+  backend-tests:
+    name: Backend tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements-dev.txt
+
+      - run: pip install -r requirements-dev.txt
+        working-directory: backend
+
+      - run: pytest
+        working-directory: backend
+
   frontend-checks:
     name: Frontend typecheck, build, test
     runs-on: ubuntu-latest
@@ -37,94 +50,83 @@ jobs:
         run: npm run test
         working-directory: frontend
 
-  build-push-deploy: # Gate job on frontend-checks to avoid deploying broken frontend
-    name: Build, push, and deploy
-    needs: frontend-checks
+  infra-tests:
+    name: Infrastructure tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - id: auth
-        uses: google-github-actions/auth@v2
+      - uses: actions/setup-node@v4
         with:
-          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+          node-version: 25
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
 
-      - uses: google-github-actions/setup-gcloud@v2
-
-      - name: Configure Docker for Artifact Registry
-        run: gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
-
-      - name: Set image tag
-        run: echo "TAG=${GITHUB_SHA::8}" >> "$GITHUB_ENV"
-
-      - name: Build and push backend
+      # The CDK app bundles frontend/dist, so it must exist before synth/tests.
+      - name: Build frontend
         run: |
-          docker build \
-            -t "$GAR_LOCATION/gym-tracker-backend:$TAG" \
-            -t "$GAR_LOCATION/gym-tracker-backend:latest" \
-            .
-          docker push "$GAR_LOCATION/gym-tracker-backend:$TAG"
-          docker push "$GAR_LOCATION/gym-tracker-backend:latest"
+          npm ci
+          npm run build
+        working-directory: frontend
 
-      - name: Build and push frontend
-        run: |
-          docker build \
-            --build-arg VITE_API_BASE_URL="" \
-            -t "$GAR_LOCATION/gym-tracker-frontend:$TAG" \
-            -t "$GAR_LOCATION/gym-tracker-frontend:latest" \
-            ./frontend
-          docker push "$GAR_LOCATION/gym-tracker-frontend:$TAG"
-          docker push "$GAR_LOCATION/gym-tracker-frontend:latest"
-
-      - uses: google-github-actions/get-gke-credentials@v2
+      - uses: actions/setup-java@v4
         with:
-          cluster_name: ${{ env.GKE_CLUSTER }}
-          location: ${{ env.GKE_ZONE }}
+          distribution: temurin
+          java-version: "21"
+          cache: maven
 
-      - name: Install kustomize
+      - run: mvn -B test
+        working-directory: infrastructure
+
+  deploy:
+    name: Deploy with CDK
+    # Gate on all test jobs to avoid deploying anything broken.
+    needs: [backend-tests, frontend-checks, infra-tests]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 25
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build frontend
         run: |
-          KUSTOMIZE_VERSION=5.3.0
-          curl -sL "https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv${KUSTOMIZE_VERSION}/kustomize_v${KUSTOMIZE_VERSION}_linux_amd64.tar.gz" \
-            | tar xz -C /tmp
-          sudo mv /tmp/kustomize /usr/local/bin/kustomize
+          npm ci
+          npm run build
+        working-directory: frontend
 
-      - name: Ensure namespace exists
-        run: kubectl apply -f k8s/namespace.yaml
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
 
-      # backend-secrets is deliberately excluded from source control — kept in
-      # sync here from GitHub secrets so CI can own the full deploy.
-      - name: Apply backend-secrets
-        run: |
-          kubectl create secret generic backend-secrets \
-            --namespace=gym-tracker \
-            --from-literal=database-url="${{ secrets.DATABASE_URL }}" \
-            --from-literal=secret-key="${{ secrets.APP_SECRET_KEY }}" \
-            --dry-run=client -o yaml | kubectl apply -f -
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: eu-west-1
 
-      # Job specs are immutable, so the old migrate Job must be gone before
-      # the kustomize-applied recreate below can pick up the newly pinned
-      # image tag — kubectl apply -k . would otherwise fail on the Job.
-      - name: Delete previous migrate Job
-        run: kubectl delete job migrate -n gym-tracker --ignore-not-found
-
-      - name: Pin image tags and deploy
-        run: |
-          cd k8s
-          kustomize edit set image \
-            "gym-tracker-backend=$GAR_LOCATION/gym-tracker-backend:$TAG" \
-            "gym-tracker-frontend=$GAR_LOCATION/gym-tracker-frontend:$TAG"
-          kubectl apply -k .
-
-      - name: Wait for migrations to complete
-        run: kubectl wait --for=condition=complete job/migrate -n gym-tracker --timeout=180s
-
-      - name: Verify rollout
-        run: |
-          kubectl rollout status deployment/backend -n gym-tracker --timeout=180s
-          kubectl rollout status deployment/frontend -n gym-tracker --timeout=180s
+      # GymCi (the OIDC provider + this role) is deployed manually, never from CI.
+      - name: Deploy
+        run: >
+          npx aws-cdk@2 deploy Gym GymCertificate
+          --require-approval never
+          -c allowedEmails="${{ vars.ALLOWED_EMAILS }}"
+          -c googleClientId="${{ vars.GOOGLE_CLIENT_ID }}"
+        working-directory: infrastructure
 
       - name: Smoke test
         run: |
-          LB_IP=$(kubectl get svc frontend -n gym-tracker -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
-          curl -sf "http://$LB_IP/health" | grep -q '"db":"connected"'
+          for i in $(seq 1 12); do
+            if curl -sf https://app.beatrix.co.za/api/health/db | grep -q '"db":"connected"'; then
+              echo "Healthy"
+              exit 0
+            fi
+            echo "Attempt $i failed; retrying in 5s"
+            sleep 5
+          done
+          echo "Smoke test failed" >&2
+          exit 1
