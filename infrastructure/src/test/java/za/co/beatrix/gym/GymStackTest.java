@@ -1,7 +1,15 @@
 package za.co.beatrix.gym;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import software.amazon.awscdk.App;
 import software.amazon.awscdk.Environment;
@@ -14,10 +22,20 @@ class GymStackTest {
 
     private static final String ACCOUNT = "123456789012";
 
+    private static final Path outDir = createOutDir();
+
     private final Template template = buildTemplate();
 
+    private static Path createOutDir() {
+        try {
+            return Files.createTempDirectory("gym-cdk-out");
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
     private static Template buildTemplate() {
-        App app = new App();
+        App app = App.Builder.create().outdir(outDir.toString()).build();
         StackProps props = StackProps.builder()
                 .env(Environment.builder().account(ACCOUNT).region("eu-west-1").build())
                 .crossRegionReferences(true)
@@ -170,5 +188,63 @@ class GymStackTest {
                 "AWS::Cognito::UserPool",
                 Match.objectLike(Map.of(
                         "AdminCreateUserConfig", Match.objectLike(Map.of("AllowAdminCreateUserOnly", false)))));
+    }
+
+    @Test
+    void bucketIsPrivate() {
+        template.hasResourceProperties(
+                "AWS::S3::Bucket",
+                Match.objectLike(Map.of(
+                        "PublicAccessBlockConfiguration",
+                        Map.of(
+                                "BlockPublicAcls", true,
+                                "BlockPublicPolicy", true,
+                                "IgnorePublicAcls", true,
+                                "RestrictPublicBuckets", true))));
+    }
+
+    @Test
+    void distributionServesAppDomainWithoutErrorResponses() {
+        template.resourceCountIs("AWS::CloudFront::Distribution", 1);
+        template.hasResourceProperties(
+                "AWS::CloudFront::Distribution",
+                Match.objectLike(Map.of("DistributionConfig", Match.objectLike(Map.of(
+                        "Aliases", List.of("app.beatrix.co.za"),
+                        "CustomErrorResponses", Match.absent())))));
+    }
+
+    @Test
+    void onlyDefaultBehaviourRewritesSpaRoutes() {
+        template.hasResourceProperties(
+                "AWS::CloudFront::Distribution",
+                Match.objectLike(Map.of("DistributionConfig", Match.objectLike(Map.of(
+                        "DefaultCacheBehavior", Match.objectLike(Map.of(
+                                "FunctionAssociations",
+                                List.of(Match.objectLike(Map.of("EventType", "viewer-request"))))))))));
+        template.hasResourceProperties(
+                "AWS::CloudFront::Distribution",
+                Match.objectLike(Map.of("DistributionConfig", Match.objectLike(Map.of(
+                        "CacheBehaviors", List.of(Match.objectLike(Map.of(
+                                "PathPattern", "/api/*",
+                                "CachePolicyId", "4135ea2d-6df8-44a3-9df3-4b5a84be39ad",
+                                "FunctionAssociations", Match.absent()))))))));
+        template.resourceCountIs("AWS::CloudFront::Function", 1);
+    }
+
+    @Test
+    void onlyGeneratedConfigJsonIsDeployed() throws IOException {
+        template.hasResourceProperties(
+                "Custom::CDKBucketDeployment",
+                Match.objectLike(Map.of(
+                        "SourceObjectKeys", Match.arrayEquals(List.of(Match.anyValue(), Match.anyValue())),
+                        "DistributionPaths", List.of("/*"))));
+        // The generated config.json is a second, inline source; the staged dist asset must not also carry one.
+        try (Stream<Path> assets = Files.list(outDir)) {
+            List<Path> distAssets = assets.filter(p -> p.getFileName().toString().startsWith("asset.")
+                            && Files.isRegularFile(p.resolve("index.html")))
+                    .toList();
+            assertEquals(1, distAssets.size());
+            assertFalse(Files.exists(distAssets.get(0).resolve("config.json")));
+        }
     }
 }

@@ -7,7 +7,7 @@ import software.amazon.awscdk.StackProps;
 import software.amazon.awscdk.services.certificatemanager.ICertificate;
 import software.constructs.Construct;
 
-/** The application stack: network, database, backend service, Cognito and HTTP API (web hosting is added later). */
+/** The application stack: network, database, backend service, Cognito, HTTP API and frontend hosting. */
 public class GymStack extends Stack {
 
     private static final String COGNITO_DOMAIN_PREFIX = "gym-beatrix";
@@ -35,10 +35,15 @@ public class GymStack extends Stack {
                         auth.getUserPool().getUserPoolId(),
                         auth.getClient().getUserPoolClientId(),
                         allowedEmails));
-        new Api(this, "Api", new ApiProps(network.getVpc(), backend, auth.getUserPool(), auth.getClient()));
+        Api api = new Api(this, "Api", new ApiProps(network.getVpc(), backend, auth.getUserPool(), auth.getClient()));
+        FrontendHosting frontend =
+                new FrontendHosting(this, "Frontend", new FrontendHostingProps(certificate, api.getHttpApi(), auth));
 
         String cognitoDomain = COGNITO_DOMAIN_PREFIX + ".auth." + GymApp.REGION + ".amazoncognito.com";
         CfnOutput.Builder.create(this, "CognitoDomain").value(cognitoDomain).build();
+        CfnOutput.Builder.create(this, "CloudFrontDomain")
+                .value(frontend.getDistribution().getDistributionDomainName())
+                .build();
         CfnOutput.Builder.create(this, "UserPoolId")
                 .value(auth.getUserPool().getUserPoolId())
                 .build();

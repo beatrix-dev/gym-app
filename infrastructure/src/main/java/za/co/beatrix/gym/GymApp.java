@@ -22,7 +22,7 @@ public class GymApp {
         App app = new App();
 
         CertificateStack certificate =
-                new CertificateStack(app, "GymCertificate", props(account, CERTIFICATE_REGION), DOMAIN);
+                new CertificateStack(app, "GymCertificate", crossRegionProps(account, CERTIFICATE_REGION), DOMAIN);
         new CiStack(app, "GymCi", props(account, REGION), GITHUB_REPO);
         new GymStack(
                 app,
