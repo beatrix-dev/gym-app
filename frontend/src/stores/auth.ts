@@ -7,6 +7,7 @@ import { cognitoLogoutUrl, getUserManager } from '@/auth/userManager'
 import type { User } from '@/types'
 
 const DEFAULT_REDIRECT = '/log'
+const DENIED_FLAG = 'auth.denied'
 
 export const useAuthStore = defineStore('auth', () => {
   const oidcUser = shallowRef<OidcUser | null>(null)
@@ -21,6 +22,11 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   async function init() {
+    // Set before the Cognito logout round-trip that follows a 403.
+    if (sessionStorage.getItem(DENIED_FLAG)) {
+      sessionStorage.removeItem(DENIED_FLAG)
+      accessDenied.value = true
+    }
     const manager = getUserManager()
     oidcUser.value = await manager.getUser()
     manager.events.addUserLoaded((loaded) => {
@@ -53,12 +59,14 @@ export const useAuthStore = defineStore('auth', () => {
     if (!oidcUser.value) return
     try {
       user.value = await fetchCurrentUser()
-      accessDenied.value = false
     } catch (e) {
       if (axios.isAxiosError(e) && e.response?.status === 403) {
-        accessDenied.value = true
+        // Also end the Cognito hosted-UI session, otherwise "Sign in" would
+        // hand back the same rejected account.
+        sessionStorage.setItem(DENIED_FLAG, '1')
         await getUserManager().removeUser()
         clearSession()
+        window.location.assign(cognitoLogoutUrl())
         return
       }
       throw e
