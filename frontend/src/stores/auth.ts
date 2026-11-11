@@ -1,45 +1,74 @@
+import axios from 'axios'
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
-import {
-  fetchCurrentUser,
-  login as loginRequest,
-  register as registerRequest,
-  updateCurrentUser,
-} from '@/api/auth'
-import { TOKEN_STORAGE_KEY } from '@/api/client'
+import { ref, shallowRef } from 'vue'
+import type { User as OidcUser } from 'oidc-client-ts'
+import { fetchCurrentUser, updateCurrentUser } from '@/api/auth'
+import { cognitoLogoutUrl, getUserManager } from '@/auth/userManager'
 import type { User } from '@/types'
 
+const DEFAULT_REDIRECT = '/log'
+
 export const useAuthStore = defineStore('auth', () => {
-  const token = ref<string | null>(localStorage.getItem(TOKEN_STORAGE_KEY))
+  const oidcUser = shallowRef<OidcUser | null>(null)
   const user = ref<User | null>(null)
+  const accessDenied = ref(false)
 
-  const isAuthenticated = () => token.value !== null
+  const isAuthenticated = () => oidcUser.value !== null && !oidcUser.value.expired
 
-  function setToken(newToken: string) {
-    token.value = newToken
-    localStorage.setItem(TOKEN_STORAGE_KEY, newToken)
+  function clearSession() {
+    oidcUser.value = null
+    user.value = null
   }
 
-  async function login(email: string, password: string) {
-    const result = await loginRequest(email, password)
-    setToken(result.access_token)
-    user.value = await fetchCurrentUser()
+  async function init() {
+    const manager = getUserManager()
+    oidcUser.value = await manager.getUser()
+    manager.events.addUserLoaded((loaded) => {
+      oidcUser.value = loaded
+    })
+    manager.events.addUserUnloaded(clearSession)
+    manager.events.addSilentRenewError(async () => {
+      await manager.removeUser()
+      clearSession()
+      // The router imports this store, so the store cannot import the router.
+      window.location.assign('/login')
+    })
   }
 
-  async function register(email: string, password: string, displayName?: string) {
-    await registerRequest({ email, password, display_name: displayName })
-    await login(email, password)
+  function signIn(redirect?: string) {
+    return getUserManager().signinRedirect({ state: redirect })
+  }
+
+  async function completeSignIn(): Promise<string> {
+    const signedIn = await getUserManager().signinRedirectCallback()
+    oidcUser.value = signedIn
+    const target = signedIn.state
+    // Only same-origin paths, to avoid an open redirect.
+    return typeof target === 'string' && target.startsWith('/') && !target.startsWith('//')
+      ? target
+      : DEFAULT_REDIRECT
   }
 
   async function loadCurrentUser() {
-    if (!token.value) return
-    user.value = await fetchCurrentUser()
+    if (!oidcUser.value) return
+    try {
+      user.value = await fetchCurrentUser()
+      accessDenied.value = false
+    } catch (e) {
+      if (axios.isAxiosError(e) && e.response?.status === 403) {
+        accessDenied.value = true
+        await getUserManager().removeUser()
+        clearSession()
+        return
+      }
+      throw e
+    }
   }
 
-  function logout() {
-    token.value = null
-    user.value = null
-    localStorage.removeItem(TOKEN_STORAGE_KEY)
+  async function logout() {
+    await getUserManager().removeUser()
+    clearSession()
+    window.location.assign(cognitoLogoutUrl())
   }
 
   async function updateProfile(dailyCalorieTarget: number | null) {
@@ -47,11 +76,13 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   return {
-    token,
+    oidcUser,
     user,
+    accessDenied,
+    init,
     isAuthenticated,
-    login,
-    register,
+    signIn,
+    completeSignIn,
     loadCurrentUser,
     logout,
     updateProfile,

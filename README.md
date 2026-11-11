@@ -34,6 +34,12 @@ Then visit:
 - http://localhost:8100/docs — interactive Swagger UI
 - http://localhost:8100/health — confirms the API can reach MySQL
 
+### Frontend runtime config
+
+The frontend reads `/config.json` at startup (`frontend/public/config.json`). For local dev, fill
+`authority`, `clientId` and `cognitoDomain` from the Cognito stack outputs; `apiBaseUrl` defaults to
+`http://localhost:8100/api`. In prod the file is generated at deploy time with `apiBaseUrl` set to `/api`.
+
 ### Verifying the migration worked
 
 ```bash

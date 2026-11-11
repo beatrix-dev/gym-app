@@ -1,11 +1,28 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
+import { AxiosError } from 'axios'
 import { useAuthStore } from './auth'
-import { TOKEN_STORAGE_KEY } from '@/api/client'
 import * as authApi from '@/api/auth'
 import type { User } from '@/types'
 
 vi.mock('@/api/auth')
+
+const manager = vi.hoisted(() => ({
+  getUser: vi.fn(),
+  removeUser: vi.fn(),
+  signinRedirect: vi.fn(),
+  signinRedirectCallback: vi.fn(),
+  events: {
+    addUserLoaded: vi.fn(),
+    addUserUnloaded: vi.fn(),
+    addSilentRenewError: vi.fn(),
+  },
+}))
+
+vi.mock('@/auth/userManager', () => ({
+  getUserManager: () => manager,
+  cognitoLogoutUrl: () => 'https://logout.example/',
+}))
 
 const mockUser: User = {
   id: 1,
@@ -14,93 +31,121 @@ const mockUser: User = {
   daily_calorie_target: null,
 }
 
+const validOidcUser = { expired: false, id_token: 'tok' }
+
+function forbidden() {
+  return new AxiosError('Forbidden', '403', undefined, undefined, {
+    status: 403,
+    data: {},
+    statusText: 'Forbidden',
+    headers: {},
+    config: {} as never,
+  })
+}
+
 describe('auth store', () => {
+  const assign = vi.fn()
+
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.clearAllMocks()
+    vi.stubGlobal('location', { origin: 'http://localhost', assign })
   })
 
-  it('starts unauthenticated when no token is stored', () => {
+  it('is unauthenticated when no oidc user is stored', async () => {
+    manager.getUser.mockResolvedValue(null)
     const store = useAuthStore()
+    await store.init()
     expect(store.isAuthenticated()).toBe(false)
-    expect(store.user).toBeNull()
   })
 
-  it('picks up an existing token from localStorage on init', () => {
-    localStorage.setItem(TOKEN_STORAGE_KEY, 'existing-token')
+  it('is authenticated for a stored, unexpired oidc user', async () => {
+    manager.getUser.mockResolvedValue(validOidcUser)
     const store = useAuthStore()
+    await store.init()
     expect(store.isAuthenticated()).toBe(true)
-    expect(store.token).toBe('existing-token')
   })
 
-  it('login stores the token and loads the current user', async () => {
-    vi.mocked(authApi.login).mockResolvedValue({ access_token: 'new-token', token_type: 'bearer' })
-    vi.mocked(authApi.fetchCurrentUser).mockResolvedValue(mockUser)
-
+  it('isAuthenticated is false for an expired oidc user', async () => {
+    manager.getUser.mockResolvedValue({ expired: true })
     const store = useAuthStore()
-    await store.login('test@example.com', 'password123')
-
-    expect(authApi.login).toHaveBeenCalledWith('test@example.com', 'password123')
-    expect(store.token).toBe('new-token')
-    expect(store.user).toEqual(mockUser)
-    expect(store.isAuthenticated()).toBe(true)
-    expect(localStorage.getItem(TOKEN_STORAGE_KEY)).toBe('new-token')
-  })
-
-  it('login propagates errors and does not set state', async () => {
-    vi.mocked(authApi.login).mockRejectedValue(new Error('invalid credentials'))
-
-    const store = useAuthStore()
-    await expect(store.login('bad@example.com', 'wrong')).rejects.toThrow('invalid credentials')
+    await store.init()
     expect(store.isAuthenticated()).toBe(false)
-    expect(store.user).toBeNull()
   })
 
-  it('register registers then logs in', async () => {
-    vi.mocked(authApi.register).mockResolvedValue(mockUser)
-    vi.mocked(authApi.login).mockResolvedValue({ access_token: 'new-token', token_type: 'bearer' })
-    vi.mocked(authApi.fetchCurrentUser).mockResolvedValue(mockUser)
-
+  it('signIn starts the redirect carrying the target path as state', async () => {
     const store = useAuthStore()
-    await store.register('test@example.com', 'password123', 'Test User')
+    await store.signIn('/meals')
+    expect(manager.signinRedirect).toHaveBeenCalledWith({ state: '/meals' })
+  })
 
-    expect(authApi.register).toHaveBeenCalledWith({
-      email: 'test@example.com',
-      password: 'password123',
-      display_name: 'Test User',
-    })
-    expect(authApi.login).toHaveBeenCalledWith('test@example.com', 'password123')
+  it('loadCurrentUser fetches the user when signed in', async () => {
+    manager.getUser.mockResolvedValue(validOidcUser)
+    vi.mocked(authApi.fetchCurrentUser).mockResolvedValue(mockUser)
+    const store = useAuthStore()
+    await store.init()
+    await store.loadCurrentUser()
     expect(store.user).toEqual(mockUser)
   })
 
-  it('loadCurrentUser is a no-op without a token', async () => {
+  it('loadCurrentUser is a no-op when signed out', async () => {
     const store = useAuthStore()
     await store.loadCurrentUser()
     expect(authApi.fetchCurrentUser).not.toHaveBeenCalled()
-    expect(store.user).toBeNull()
   })
 
-  it('loadCurrentUser fetches the user when a token is present', async () => {
-    localStorage.setItem(TOKEN_STORAGE_KEY, 'existing-token')
-    vi.mocked(authApi.fetchCurrentUser).mockResolvedValue(mockUser)
-
+  it('loadCurrentUser 403 sets accessDenied and clears session', async () => {
+    manager.getUser.mockResolvedValue(validOidcUser)
+    vi.mocked(authApi.fetchCurrentUser).mockRejectedValue(forbidden())
     const store = useAuthStore()
+    await store.init()
     await store.loadCurrentUser()
 
-    expect(store.user).toEqual(mockUser)
-  })
-
-  it('logout clears token and user', async () => {
-    vi.mocked(authApi.login).mockResolvedValue({ access_token: 'new-token', token_type: 'bearer' })
-    vi.mocked(authApi.fetchCurrentUser).mockResolvedValue(mockUser)
-
-    const store = useAuthStore()
-    await store.login('test@example.com', 'password123')
-    store.logout()
-
-    expect(store.token).toBeNull()
+    expect(store.accessDenied).toBe(true)
+    expect(manager.removeUser).toHaveBeenCalled()
     expect(store.user).toBeNull()
     expect(store.isAuthenticated()).toBe(false)
-    expect(localStorage.getItem(TOKEN_STORAGE_KEY)).toBeNull()
+  })
+
+  it('loadCurrentUser rethrows other errors', async () => {
+    manager.getUser.mockResolvedValue(validOidcUser)
+    vi.mocked(authApi.fetchCurrentUser).mockRejectedValue(new Error('boom'))
+    const store = useAuthStore()
+    await store.init()
+    await expect(store.loadCurrentUser()).rejects.toThrow('boom')
+  })
+
+  it('silent renew error clears session and routes to login', async () => {
+    manager.getUser.mockResolvedValue(validOidcUser)
+    const store = useAuthStore()
+    await store.init()
+
+    const onRenewError = manager.events.addSilentRenewError.mock.calls[0][0]
+    await onRenewError()
+
+    expect(manager.removeUser).toHaveBeenCalled()
+    expect(store.isAuthenticated()).toBe(false)
+    expect(assign).toHaveBeenCalledWith('/login')
+  })
+
+  it('completeSignIn returns redirect from state, default /log', async () => {
+    const store = useAuthStore()
+    manager.signinRedirectCallback.mockResolvedValueOnce({ state: '/meals' })
+    expect(await store.completeSignIn()).toBe('/meals')
+    manager.signinRedirectCallback.mockResolvedValueOnce({ state: undefined })
+    expect(await store.completeSignIn()).toBe('/log')
+    manager.signinRedirectCallback.mockResolvedValueOnce({ state: '//evil.example' })
+    expect(await store.completeSignIn()).toBe('/log')
+  })
+
+  it('logout clears the session and goes to the Cognito logout URL', async () => {
+    manager.getUser.mockResolvedValue(validOidcUser)
+    const store = useAuthStore()
+    await store.init()
+    await store.logout()
+
+    expect(manager.removeUser).toHaveBeenCalled()
+    expect(store.isAuthenticated()).toBe(false)
+    expect(assign).toHaveBeenCalledWith('https://logout.example/')
   })
 })
