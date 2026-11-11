@@ -29,16 +29,16 @@ CI does not need the `MAVEN_SKIP_RC`/`JAVA_HOME` prefix.
 ## One-time bootstrap
 
 Run from `infrastructure/`. Replace `<acct>` with your AWS account ID, and `<google-client-id>` once you have it
-(step 3). Define the context flags once for convenience:
+(step 3). Define the context flags once as an array (works in bash and zsh):
 
 ```sh
-CTX='-c allowedEmails=you@example.com -c googleClientId=<google-client-id>'
+CTX=(-c allowedEmails=you@example.com -c googleClientId=<google-client-id>)
 ```
 
 ### 1. Bootstrap CDK in both regions
 
 ```sh
-npx aws-cdk@2 bootstrap aws://<acct>/eu-west-1 aws://<acct>/us-east-1 $CTX
+npx aws-cdk@2 bootstrap aws://<acct>/eu-west-1 aws://<acct>/us-east-1 "${CTX[@]}"
 ```
 
 ### 2. Create the Google OAuth client (first)
@@ -65,7 +65,7 @@ Now set `CTX` with the real client ID.
 ### 4. Deploy the certificate and validate it
 
 ```sh
-npx aws-cdk@2 deploy GymCertificate $CTX
+npx aws-cdk@2 deploy GymCertificate "${CTX[@]}"
 ```
 
 The deploy waits until the certificate validates. While it waits, in another shell fetch the validation record:
@@ -81,7 +81,7 @@ Add that CNAME (name and value) at your DNS registrar (xneelo/Afrihost). The dep
 ### 5. Deploy the CI stack
 
 ```sh
-npx aws-cdk@2 deploy GymCi $CTX
+npx aws-cdk@2 deploy GymCi "${CTX[@]}"
 ```
 
 Note the `DeployRoleArn` output. Then in the GitHub repo (Settings > Secrets and variables > Actions > Variables) set:
@@ -100,7 +100,7 @@ Either delete the unused provider (IAM > Identity providers) or adapt `CiStack` 
 Either push to `main` (CI runs `cdk deploy Gym GymCertificate`) or run it locally:
 
 ```sh
-npx aws-cdk@2 deploy Gym GymCertificate $CTX
+npx aws-cdk@2 deploy Gym GymCertificate "${CTX[@]}"
 ```
 
 ### 7. Point DNS at CloudFront
