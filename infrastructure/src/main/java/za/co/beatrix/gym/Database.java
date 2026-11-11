@@ -33,6 +33,7 @@ public class Database extends Construct {
                 .writer(ClusterInstance.serverlessV2("writer"))
                 .credentials(Credentials.fromGeneratedSecret("gymapp"))
                 .defaultDatabaseName(NAME)
+                .storageEncrypted(true)
                 .removalPolicy(RemovalPolicy.SNAPSHOT)
                 .build();
     }

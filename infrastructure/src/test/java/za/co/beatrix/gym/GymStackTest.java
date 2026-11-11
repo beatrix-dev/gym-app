@@ -46,6 +46,7 @@ class GymStackTest {
                 "AWS::RDS::DBCluster",
                 Match.objectLike(Map.of(
                         "Engine", "aurora-mysql",
+                        "StorageEncrypted", true,
                         "ServerlessV2ScalingConfiguration", Map.of("MinCapacity", 0, "MaxCapacity", 2))));
     }
 
