@@ -20,9 +20,11 @@ import software.amazon.awscdk.services.cognito.UserPoolIdentityProviderGoogle;
 import software.constructs.Construct;
 
 /**
- * Cognito user pool where Google is the only way in. Self sign-up is left at its default: the AWS docs do not
- * state that disabling it still allows a first-time federated sign-in. The backend rejects tokens without a
- * Google identity and enforces the email allowlist, and the app client has no password flows.
+ * Cognito user pool where Google is the only way in. Self sign-up is enabled explicitly (CDK defaults it to off,
+ * i.e. AllowAdminCreateUserOnly) because the AWS docs do not confirm that a first-time federated Google sign-in
+ * works when it is off, and a wrong guess would lock the owner out. Natively signed-up users cannot get tokens:
+ * the app client allows only refresh-token auth and only the Google IdP, and the backend rejects tokens without
+ * a Google identity and enforces the email allowlist.
  */
 public class Auth extends Construct {
 
@@ -36,6 +38,7 @@ public class Auth extends Construct {
         super(scope, id);
 
         this.userPool = UserPool.Builder.create(this, "UserPool")
+                .selfSignUpEnabled(true)
                 .removalPolicy(RemovalPolicy.RETAIN)
                 .build();
 

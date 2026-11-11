@@ -163,4 +163,12 @@ class GymStackTest {
                     Match.objectLike(Map.of("RouteKey", route, "AuthorizationType", "NONE")));
         }
     }
+
+    @Test
+    void userPoolKeepsSelfSignUpEnabledSoFederatedFirstSignInCannotBeBlocked() {
+        template.hasResourceProperties(
+                "AWS::Cognito::UserPool",
+                Match.objectLike(Map.of(
+                        "AdminCreateUserConfig", Match.objectLike(Map.of("AllowAdminCreateUserOnly", false)))));
+    }
 }
