@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import MealPlannerView from './MealPlannerView.vue'
@@ -104,7 +104,10 @@ function localIsoDate(date: Date): string {
   return `${year}-${month}-${day}`
 }
 
-const todayIso = localIsoDate(new Date())
+// Pin "today" so the rendered calendar month matches the hardcoded dates below.
+// Only Date is faked: faking all timers breaks flushPromises.
+const FIXED_NOW = new Date(2026, 6, 15, 12)
+const todayIso = localIsoDate(FIXED_NOW)
 
 function findButtonByText(wrapper: ReturnType<typeof mount>, text: string) {
   return wrapper.findAll('button').find((button) => button.text().includes(text))
@@ -126,9 +129,15 @@ async function selectFoodInPicker(wrapper: ReturnType<typeof mount>, name: strin
 
 describe('MealPlannerView', () => {
   beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(FIXED_NOW)
     setActivePinia(createPinia())
     vi.clearAllMocks()
     vi.mocked(mealPlansApi.getDailyTotals).mockResolvedValue(emptyTotals)
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
   })
 
   it('shows an empty state when there are no plans or food items', async () => {

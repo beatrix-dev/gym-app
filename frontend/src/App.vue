@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { onMounted } from 'vue'
-import { RouterLink, RouterView, useRouter } from 'vue-router'
+import { RouterLink, RouterView } from 'vue-router'
+import { isWakingUp } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 
 const authStore = useAuthStore()
-const router = useRouter()
 
 onMounted(() => {
   if (authStore.isAuthenticated()) {
@@ -14,7 +14,6 @@ onMounted(() => {
 
 function handleLogout() {
   authStore.logout()
-  router.push('/login')
 }
 </script>
 
@@ -57,6 +56,9 @@ function handleLogout() {
         </button>
       </nav>
     </header>
+    <div v-if="isWakingUp" class="bg-amber-100 px-4 py-2 text-center text-sm text-amber-900">
+      Waking up the server…
+    </div>
     <main class="mx-auto max-w-3xl px-4 py-8">
       <RouterView />
     </main>

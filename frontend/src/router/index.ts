@@ -6,15 +6,15 @@ const router = createRouter({
   routes: [
     { path: '/', redirect: '/log' },
     {
-      path: '/logen',
+      path: '/login',
       name: 'login',
       component: () => import('@/views/LoginView.vue'),
       meta: { public: true },
     },
     {
-      path: '/register',
-      name: 'register',
-      component: () => import('@/views/RegisterView.vue'),
+      path: '/auth/callback',
+      name: 'auth-callback',
+      component: () => import('@/views/AuthCallbackView.vue'),
       meta: { public: true },
     },
     {

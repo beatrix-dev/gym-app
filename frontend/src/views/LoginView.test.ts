@@ -2,19 +2,19 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { createMemoryHistory, createRouter } from 'vue-router'
-import { AxiosError } from 'axios'
 import LoginView from './LoginView.vue'
 import { useAuthStore } from '@/stores/auth'
 
-function makeRouter() {
-  return createRouter({
+vi.mock('@/auth/userManager', () => ({ getUserManager: vi.fn(), cognitoLogoutUrl: vi.fn() }))
+
+async function mountAt(path: string) {
+  const router = createRouter({
     history: createMemoryHistory(),
-    routes: [
-      { path: '/', component: { template: '<div />' } },
-      { path: '/login', name: 'login', component: LoginView },
-      { path: '/log', name: 'exercise-log', component: { template: '<div />' } },
-    ],
+    routes: [{ path: '/login', name: 'login', component: LoginView }],
   })
+  await router.push(path)
+  await router.isReady()
+  return mount(LoginView, { global: { plugins: [router] } })
 }
 
 describe('LoginView', () => {
@@ -22,83 +22,23 @@ describe('LoginView', () => {
     setActivePinia(createPinia())
   })
 
-  it('submits credentials and navigates to /log on success', async () => {
-    const router = makeRouter()
-    await router.push('/login')
-    await router.isReady()
+  it('Sign in with Google calls signIn with ?redirect', async () => {
+    const wrapper = await mountAt('/login?redirect=%2Frecords')
+    const signIn = vi.spyOn(useAuthStore(), 'signIn').mockResolvedValue()
 
-    const wrapper = mount(LoginView, { global: { plugins: [router] } })
-    const authStore = useAuthStore()
-    const loginSpy = vi.spyOn(authStore, 'login').mockResolvedValue()
+    await wrapper.find('button').trigger('click')
 
-    await wrapper.find('input[type="email"]').setValue('test@example.com')
-    await wrapper.find('input[type="password"]').setValue('password123')
-    await wrapper.find('form').trigger('submit.prevent')
-    await flushPromises()
-
-    expect(loginSpy).toHaveBeenCalledWith('test@example.com', 'password123')
-    expect(router.currentRoute.value.path).toBe('/log')
+    expect(wrapper.find('button').text()).toBe('Sign in with Google')
+    expect(signIn).toHaveBeenCalledWith('/records')
   })
 
-  it('redirects to the query redirect target after login', async () => {
-    const router = makeRouter()
-    await router.push('/login?redirect=%2Frecords')
-    await router.isReady()
+  it('shows not-allowed message when accessDenied', async () => {
+    const wrapper = await mountAt('/login')
+    expect(wrapper.text()).not.toContain("isn't allowed")
 
-    const wrapper = mount(LoginView, { global: { plugins: [router] } })
-    const authStore = useAuthStore()
-    vi.spyOn(authStore, 'login').mockResolvedValue()
+    useAuthStore().accessDenied = true
+    await wrapper.vm.$nextTick()
 
-    await wrapper.find('input[type="email"]').setValue('test@example.com')
-    await wrapper.find('input[type="password"]').setValue('password123')
-    await wrapper.find('form').trigger('submit.prevent')
-    await flushPromises()
-
-    expect(router.currentRoute.value.path).toBe('/records')
-  })
-
-  it('shows an error message on 401', async () => {
-    const router = makeRouter()
-    await router.push('/login')
-    await router.isReady()
-
-    const wrapper = mount(LoginView, { global: { plugins: [router] } })
-    const authStore = useAuthStore()
-    const axiosError = new AxiosError('Unauthorized', '401', undefined, undefined, {
-      status: 401,
-      data: {},
-      statusText: 'Unauthorized',
-      headers: {},
-      config: {} as never,
-    })
-    vi.spyOn(authStore, 'login').mockRejectedValue(axiosError)
-
-    await wrapper.find('input[type="email"]').setValue('bad@example.com')
-    await wrapper.find('input[type="password"]').setValue('wrong')
-    await wrapper.find('form').trigger('submit.prevent')
-    await flushPromises()
-
-    expect(wrapper.text()).toContain('Incorrect email or password.')
-  })
-
-  it('shows a generic error message on other failures', async () => {
-    const router = makeRouter()
-    await router.push('/login')
-    await router.isReady()
-
-    const wrapper = mount(LoginView, { global: { plugins: [router] } })
-    const authStore = useAuthStore()
-    vi.spyOn(authStore, 'login').mockRejectedValue(new Error('network down'))
-
-    await wrapper.find('input[type="email"]').setValue('test@example.com')
-    await wrapper.find('input[type="password"]').setValue('password123')
-    await wrapper.find('form').trigger('submit.prevent')
-    await flushPromises()
-
-    expect(wrapper.text()).toContain('Something went wrong. Please try again.')
+    expect(wrapper.text()).toContain("This Google account isn't allowed to use this app.")
   })
 })
-
-function flushPromises() {
-  return new Promise((resolve) => setTimeout(resolve, 0))
-}

@@ -1,7 +1,13 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
-import { TOKEN_STORAGE_KEY } from '@/api/client'
+import { useAuthStore } from '@/stores/auth'
 import router from './index'
+
+vi.mock('@/auth/userManager', () => ({ getUserManager: vi.fn(), cognitoLogoutUrl: vi.fn() }))
+
+function signIn() {
+  useAuthStore().oidcUser = { expired: false } as never
+}
 
 describe('router navigation guard', () => {
   beforeEach(() => {
@@ -21,19 +27,28 @@ describe('router navigation guard', () => {
   })
 
   it('allows authenticated users to reach protected routes', async () => {
-    localStorage.setItem(TOKEN_STORAGE_KEY, 'a-token')
+    signIn()
     await router.push('/records')
     expect(router.currentRoute.value.name).toBe('personal-records')
   })
 
   it('redirects authenticated users away from public-only routes', async () => {
-    localStorage.setItem(TOKEN_STORAGE_KEY, 'a-token')
+    signIn()
     await router.push('/login')
     expect(router.currentRoute.value.name).toBe('exercise-log')
   })
 
+  it('/auth/callback is public', async () => {
+    await router.push('/auth/callback')
+    expect(router.currentRoute.value.name).toBe('auth-callback')
+  })
+
+  it('/register no longer exists', () => {
+    expect(router.resolve('/register').matched).toHaveLength(0)
+  })
+
   it('redirects root to the exercise log route', async () => {
-    localStorage.setItem(TOKEN_STORAGE_KEY, 'a-token')
+    signIn()
     await router.push('/')
     expect(router.currentRoute.value.name).toBe('exercise-log')
   })
