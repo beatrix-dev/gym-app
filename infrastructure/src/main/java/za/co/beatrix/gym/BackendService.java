@@ -110,6 +110,9 @@ public class BackendService extends Construct {
                         .containerPort(PORT)
                         .build())
                 .build();
+        // The container migrates the database on start, so it must not start until the writer instance (a child
+        // of the cluster construct) exists; depending on the secret alone only waits for the cluster.
+        service.getNode().addDependency(props.database().getCluster());
 
         props.database().getCluster().getConnections().allowDefaultPortFrom(securityGroup);
     }

@@ -2,6 +2,7 @@ package za.co.beatrix.gym;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -98,6 +99,16 @@ class GymStackTest {
                         "ServiceRegistries", Match.anyValue(),
                         "DeploymentConfiguration",
                         Match.objectLike(Map.of("MinimumHealthyPercent", 100, "MaximumPercent", 200)))));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void serviceWaitsForDatabaseInstance() {
+        // The entrypoint migrates on start, so tasks crash-loop if they start before the writer instance exists.
+        String instanceId = template.findResources("AWS::RDS::DBInstance").keySet().iterator().next();
+        Map<String, Object> service =
+                (Map<String, Object>) template.findResources("AWS::ECS::Service").values().iterator().next();
+        assertTrue(((List<String>) service.get("DependsOn")).contains(instanceId));
     }
 
     @Test
