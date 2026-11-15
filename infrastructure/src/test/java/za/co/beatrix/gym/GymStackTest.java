@@ -48,8 +48,7 @@ class GymStackTest {
                         .crossRegionReferences(true)
                         .build(),
                 "app.example.com");
-        return Template.fromStack(new GymStack(
-                app, "TestGym", props, certificate.getCertificate(), "a@b.c", "google-client-id"));
+        return Template.fromStack(new GymStack(app, "TestGym", props, certificate.getCertificate()));
     }
 
     @Test
@@ -139,14 +138,16 @@ class GymStackTest {
     }
 
     @Test
-    void appClientIsGoogleOnlyCodeGrantWithoutPasswordFlows() {
+    void appClientIsCognitoOnlyCodeGrantWithSrpAndRefreshOnly() {
         template.hasResourceProperties(
                 "AWS::Cognito::UserPoolClient",
                 Match.objectLike(Map.of(
-                        "SupportedIdentityProviders", List.of("Google"),
+                        "SupportedIdentityProviders", List.of("COGNITO"),
                         "GenerateSecret", false,
                         "AllowedOAuthFlows", List.of("code"),
-                        "ExplicitAuthFlows", List.of("ALLOW_REFRESH_TOKEN_AUTH"))));
+                        "ExplicitAuthFlows",
+                        Match.arrayEquals(List.of("ALLOW_USER_SRP_AUTH", "ALLOW_REFRESH_TOKEN_AUTH")))));
+        template.resourceCountIs("AWS::Cognito::UserPoolIdentityProvider", 0);
     }
 
     @Test
@@ -183,11 +184,21 @@ class GymStackTest {
     }
 
     @Test
-    void userPoolKeepsSelfSignUpEnabledSoFederatedFirstSignInCannotBeBlocked() {
+    void userPoolAllowsOnlyAdminCreatedEmailAccounts() {
         template.hasResourceProperties(
                 "AWS::Cognito::UserPool",
                 Match.objectLike(Map.of(
-                        "AdminCreateUserConfig", Match.objectLike(Map.of("AllowAdminCreateUserOnly", false)))));
+                        "AdminCreateUserConfig", Match.objectLike(Map.of("AllowAdminCreateUserOnly", true)),
+                        "UsernameAttributes", List.of("email"))));
+    }
+
+    @Test
+    void backendHasNoEmailAllowlist() {
+        template.hasResourceProperties(
+                "AWS::ECS::TaskDefinition",
+                containerWith(
+                        "Environment",
+                        Match.not(Match.arrayWith(List.of(Match.objectLike(Map.of("Name", "ALLOWED_EMAILS")))))));
     }
 
     @Test

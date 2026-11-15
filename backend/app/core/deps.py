@@ -2,7 +2,6 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
-from app.core.config import settings
 from app.core.database import get_db
 from app.core.security import InvalidToken, verify_id_token
 from app.models.user import User
@@ -27,15 +26,10 @@ def get_current_user(
     except InvalidToken:
         raise credentials_error
 
-    # Native Cognito users could claim any (unverified) email, so require a Google identity.
-    is_google = any(i.get("providerName") == "Google" for i in claims.get("identities") or [])
-    email = claims.get("email", "")
-    if not is_google or email.strip().lower() not in settings.allowed_emails_set:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account not allowed")
-
+    # Accounts can only be created by an administrator, so a valid token is enough to be let in.
     user = db.query(User).filter(User.cognito_sub == claims["sub"]).first()
     if user is None:
-        user = User(cognito_sub=claims["sub"], email=email, display_name=claims.get("name"))
+        user = User(cognito_sub=claims["sub"], email=claims.get("email", ""), display_name=claims.get("name"))
         db.add(user)
         db.commit()
         db.refresh(user)

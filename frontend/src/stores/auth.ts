@@ -1,4 +1,3 @@
-import axios from 'axios'
 import { defineStore } from 'pinia'
 import { ref, shallowRef } from 'vue'
 import type { User as OidcUser } from 'oidc-client-ts'
@@ -7,12 +6,10 @@ import { cognitoLogoutUrl, getUserManager } from '@/auth/userManager'
 import type { User } from '@/types'
 
 const DEFAULT_REDIRECT = '/log'
-const DENIED_FLAG = 'auth.denied'
 
 export const useAuthStore = defineStore('auth', () => {
   const oidcUser = shallowRef<OidcUser | null>(null)
   const user = ref<User | null>(null)
-  const accessDenied = ref(false)
 
   const isAuthenticated = () => oidcUser.value !== null && !oidcUser.value.expired
 
@@ -22,11 +19,6 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   async function init() {
-    // Set before the Cognito logout round-trip that follows a 403.
-    if (sessionStorage.getItem(DENIED_FLAG)) {
-      sessionStorage.removeItem(DENIED_FLAG)
-      accessDenied.value = true
-    }
     const manager = getUserManager()
     oidcUser.value = await manager.getUser()
     // oidc-client-ts schedules no renewal for an already-expired token, so use
@@ -67,20 +59,7 @@ export const useAuthStore = defineStore('auth', () => {
 
   async function loadCurrentUser() {
     if (!oidcUser.value) return
-    try {
-      user.value = await fetchCurrentUser()
-    } catch (e) {
-      if (axios.isAxiosError(e) && e.response?.status === 403) {
-        // Also end the Cognito hosted-UI session, otherwise "Sign in" would
-        // hand back the same rejected account.
-        sessionStorage.setItem(DENIED_FLAG, '1')
-        await getUserManager().removeUser()
-        clearSession()
-        window.location.assign(cognitoLogoutUrl())
-        return
-      }
-      throw e
-    }
+    user.value = await fetchCurrentUser()
   }
 
   async function logout() {
@@ -96,7 +75,6 @@ export const useAuthStore = defineStore('auth', () => {
   return {
     oidcUser,
     user,
-    accessDenied,
     init,
     isAuthenticated,
     signIn,

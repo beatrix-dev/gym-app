@@ -13,7 +13,6 @@ export function getUserManager(): UserManager {
       post_logout_redirect_uri: `${window.location.origin}/`,
       response_type: 'code',
       scope: 'openid email profile',
-      extraQueryParams: { identity_provider: 'Google' },
       automaticSilentRenew: true,
       userStore: new WebStorageStateStore({ store: window.localStorage }),
     })

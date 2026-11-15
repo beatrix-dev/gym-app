@@ -22,23 +22,13 @@ describe('LoginView', () => {
     setActivePinia(createPinia())
   })
 
-  it('Sign in with Google calls signIn with ?redirect', async () => {
+  it('Sign in calls signIn with ?redirect', async () => {
     const wrapper = await mountAt('/login?redirect=%2Frecords')
     const signIn = vi.spyOn(useAuthStore(), 'signIn').mockResolvedValue()
 
     await wrapper.find('button').trigger('click')
 
-    expect(wrapper.find('button').text()).toBe('Sign in with Google')
+    expect(wrapper.find('button').text()).toBe('Sign in')
     expect(signIn).toHaveBeenCalledWith('/records')
-  })
-
-  it('shows not-allowed message when accessDenied', async () => {
-    const wrapper = await mountAt('/login')
-    expect(wrapper.text()).not.toContain("isn't allowed")
-
-    useAuthStore().accessDenied = true
-    await wrapper.vm.$nextTick()
-
-    expect(wrapper.text()).toContain("This Google account isn't allowed to use this app.")
   })
 })

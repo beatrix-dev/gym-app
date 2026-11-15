@@ -25,7 +25,6 @@ services:
       ALLOWED_ORIGINS: http://localhost:5173
       COGNITO_USER_POOL_ID: ${COGNITO_USER_POOL_ID:-}
       COGNITO_CLIENT_ID: ${COGNITO_CLIENT_ID:-}
-      ALLOWED_EMAILS: ${ALLOWED_EMAILS:-}
     ports:
       - "8100:8100"
     depends_on:

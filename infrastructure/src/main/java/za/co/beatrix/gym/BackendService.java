@@ -85,8 +85,7 @@ public class BackendService extends Construct {
                         "DB_NAME", Database.NAME,
                         "COGNITO_REGION", GymApp.REGION,
                         "COGNITO_USER_POOL_ID", props.userPoolId(),
-                        "COGNITO_CLIENT_ID", props.userPoolClientId(),
-                        "ALLOWED_EMAILS", props.allowedEmails()))
+                        "COGNITO_CLIENT_ID", props.userPoolClientId()))
                 .build());
 
         this.securityGroup = SecurityGroup.Builder.create(this, "SecurityGroup")

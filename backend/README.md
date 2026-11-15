@@ -5,7 +5,7 @@ FastAPI + SQLAlchemy + MySQL, authenticated with Cognito ID tokens.
 ## Run with Docker Compose
 
 ```sh
-cp .env.example .env   # set COGNITO_USER_POOL_ID, COGNITO_CLIENT_ID, ALLOWED_EMAILS (e.g. you@example.com)
+cp .env.example .env   # set COGNITO_USER_POOL_ID, COGNITO_CLIENT_ID
 docker compose up -d --build
 curl localhost:8100/api/health
 ```
@@ -40,4 +40,3 @@ pytest
 | `DATABASE_URL` | Full DB URL; otherwise built from `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` |
 | `ALLOWED_ORIGINS` | CORS origins |
 | `COGNITO_REGION`, `COGNITO_USER_POOL_ID`, `COGNITO_CLIENT_ID` | Token verification |
-| `ALLOWED_EMAILS` | Email allowlist |

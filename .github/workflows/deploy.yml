@@ -116,8 +116,6 @@ jobs:
         run: >
           npx aws-cdk@2 deploy Gym GymCertificate
           --require-approval never
-          -c allowedEmails="${{ vars.ALLOWED_EMAILS }}"
-          -c googleClientId="${{ vars.GOOGLE_CLIENT_ID }}"
         working-directory: infrastructure
 
       - name: Smoke test

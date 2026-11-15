@@ -85,7 +85,6 @@ def make_token(monkeypatch):
     monkeypatch.setattr(settings, "cognito_region", REGION)
     monkeypatch.setattr(settings, "cognito_user_pool_id", POOL_ID)
     monkeypatch.setattr(settings, "cognito_client_id", CLIENT_ID)
-    monkeypatch.setattr(settings, "allowed_emails", "owner@example.com")
 
     def _make_token(*, key=None, drop=(), **overrides) -> str:
         claims = {
@@ -97,7 +96,6 @@ def make_token(monkeypatch):
             "name": "Owner",
             "exp": int(time.time()) + 300,
             "at_hash": "x",
-            "identities": [{"providerName": "Google", "userId": "123", "providerType": "Google"}],
         }
         claims.update(overrides)
         for name in drop:

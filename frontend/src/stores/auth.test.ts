@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
-import { AxiosError } from 'axios'
 import { useAuthStore } from './auth'
 import * as authApi from '@/api/auth'
 import type { User } from '@/types'
@@ -33,16 +32,6 @@ const mockUser: User = {
 }
 
 const validOidcUser = { expired: false, id_token: 'tok' }
-
-function forbidden() {
-  return new AxiosError('Forbidden', '403', undefined, undefined, {
-    status: 403,
-    data: {},
-    statusText: 'Forbidden',
-    headers: {},
-    config: {} as never,
-  })
-}
 
 describe('auth store', () => {
   const assign = vi.fn()
@@ -121,31 +110,7 @@ describe('auth store', () => {
     expect(authApi.fetchCurrentUser).not.toHaveBeenCalled()
   })
 
-  it('loadCurrentUser 403 sets denied flag, clears session and logs out of Cognito', async () => {
-    manager.getUser.mockResolvedValue(validOidcUser)
-    vi.mocked(authApi.fetchCurrentUser).mockRejectedValue(forbidden())
-    const store = useAuthStore()
-    await store.init()
-    await store.loadCurrentUser()
-
-    expect(sessionStorage.getItem('auth.denied')).toBe('1')
-    expect(manager.removeUser).toHaveBeenCalled()
-    expect(store.user).toBeNull()
-    expect(store.isAuthenticated()).toBe(false)
-    expect(assign).toHaveBeenCalledWith('https://logout.example/')
-  })
-
-  it('init sets accessDenied from the denied flag and clears it', async () => {
-    manager.getUser.mockResolvedValue(null)
-    sessionStorage.setItem('auth.denied', '1')
-    const store = useAuthStore()
-    await store.init()
-
-    expect(store.accessDenied).toBe(true)
-    expect(sessionStorage.getItem('auth.denied')).toBeNull()
-  })
-
-  it('loadCurrentUser rethrows other errors', async () => {
+  it('loadCurrentUser rethrows errors', async () => {
     manager.getUser.mockResolvedValue(validOidcUser)
     vi.mocked(authApi.fetchCurrentUser).mockRejectedValue(new Error('boom'))
     const store = useAuthStore()

@@ -1,7 +1,7 @@
 # Infrastructure (CDK, Java)
 
-> **Do not merge or push this branch to `main` until the one-time bootstrap below is complete.** Merging is a push
-> to `main`, which triggers the deploy job, and that job needs the `GymCi` role and the GitHub variables.
+> **Do not merge or push to `main` until the one-time bootstrap below is complete.** Merging is a push to `main`,
+> which triggers the deploy job, and that job needs the deploy role and the `AWS_DEPLOY_ROLE_ARN` GitHub variable.
 
 Three stacks, all in `za.co.beatrix.gym`:
 
@@ -9,14 +9,14 @@ Three stacks, all in `za.co.beatrix.gym`:
 | --- | --- | --- |
 | `GymCertificate` | us-east-1 | ACM certificate for `app.beatrix.co.za` (CloudFront requires us-east-1) |
 | `GymCi` | eu-west-1 | GitHub OIDC provider and the deploy role CI assumes. Deployed manually once, never from CI |
-| `Gym` | eu-west-1 | VPC (no NAT), Aurora Serverless v2, Fargate backend, Cognito + Google, HTTP API, S3 + CloudFront. Depends on `GymCertificate` |
+| `Gym` | eu-west-1 | VPC (no NAT), Aurora Serverless v2, Fargate backend, Cognito, HTTP API, S3 + CloudFront. Depends on `GymCertificate` |
+
+Everything runs on AWS. Sign-in uses Cognito email + password accounts that only an administrator can create, so
+the user pool itself is the list of who may use the app.
 
 ## Requirements for every CDK command
 
 - `frontend/dist` must exist (`cd frontend && npm ci && npm run build`); the app bundles it.
-- Every `cdk` command (synth, deploy, including `GymCi` and `GymCertificate`) needs both context values,
-  otherwise synth fails:
-  `-c allowedEmails=you@example.com -c googleClientId=<google-client-id>`
 - JDK 21, Node (the tests run `node`), and Docker (the backend image is built for linux/amd64).
 
 Local tests:
@@ -31,47 +31,18 @@ CI does not need the `MAVEN_SKIP_RC`/`JAVA_HOME` prefix.
 
 ## One-time bootstrap
 
-Run from `infrastructure/`. Replace `<acct>` with your AWS account ID, and `<google-client-id>` once you have it
-(step 3). Define the context flags once as an array (works in bash and zsh):
-
-```sh
-CTX=(-c allowedEmails=you@example.com -c googleClientId=<google-client-id>)
-```
+Run from `infrastructure/`. Replace `<acct>` with your AWS account ID.
 
 ### 1. Bootstrap CDK in both regions
 
 ```sh
-npx aws-cdk@2 bootstrap aws://<acct>/eu-west-1 aws://<acct>/us-east-1 "${CTX[@]}"
+npx aws-cdk@2 bootstrap aws://<acct>/eu-west-1 aws://<acct>/us-east-1
 ```
 
-### 2. Create the Google OAuth client (first)
-
-The Cognito domain prefix is fixed, so the redirect URI is known before anything is deployed. In the Google Cloud
-Console (APIs & Services > Credentials) create an OAuth client of type "Web application" with:
-
-- Authorised redirect URI: `https://gym-beatrix.auth.eu-west-1.amazoncognito.com/oauth2/idpresponse`
-
-(This matches the `GoogleRedirectUri` stack output.) Keep the client ID and secret.
-
-On the OAuth consent screen, either publish the app, or (if left in "Testing") add yourself and any account you
-want to test the "not allowed" message with as test users. Otherwise Google blocks them before they reach the app.
-
-### 3. Store the Google client secret
-
-It must exist in Secrets Manager (eu-west-1) before `Gym` is deployed:
+### 2. Deploy the certificate and validate it
 
 ```sh
-aws secretsmanager create-secret --region eu-west-1 \
-  --name gym-app/google-oauth-client-secret \
-  --secret-string '<google-client-secret>'
-```
-
-Now set `CTX` with the real client ID.
-
-### 4. Deploy the certificate and validate it
-
-```sh
-npx aws-cdk@2 deploy GymCertificate "${CTX[@]}"
+npx aws-cdk@2 deploy GymCertificate
 ```
 
 The deploy waits until the certificate validates. While it waits, in another shell fetch the validation record:
@@ -84,52 +55,67 @@ aws acm describe-certificate --region us-east-1 --certificate-arn <arn> \
 
 Add that CNAME (name and value) at your DNS registrar (xneelo/Afrihost). The deploy completes once DNS propagates.
 
-### 5. Deploy the CI stack
+### 3. Deploy the CI stack
 
 ```sh
-npx aws-cdk@2 deploy GymCi "${CTX[@]}"
+npx aws-cdk@2 deploy GymCi
 ```
 
-Note the `DeployRoleArn` output. Then in the GitHub repo (Settings > Secrets and variables > Actions > Variables) set:
+Note the `DeployRoleArn` output. Then in the GitHub repo (Settings > Secrets and variables > Actions > **Variables**,
+not Secrets: the workflow reads it with `vars.`) set:
 
 | Variable | Value |
 | --- | --- |
 | `AWS_DEPLOY_ROLE_ARN` | `DeployRoleArn` output |
-| `ALLOWED_EMAILS` | the same value you pass as `allowedEmails` |
-| `GOOGLE_CLIENT_ID` | the Google client ID from step 2 |
 
 Gotcha: an AWS account allows only one GitHub OIDC provider. If one already exists, the `GymCi` deploy fails.
 Either delete the unused provider (IAM > Identity providers) or adapt `CiStack` to import the existing one.
 
-### 6. Deploy the app (locally)
+### 4. Deploy the app (locally)
 
 The first `Gym` deploy is done locally only:
 
 ```sh
-npx aws-cdk@2 deploy Gym GymCertificate "${CTX[@]}"
+npx aws-cdk@2 deploy Gym GymCertificate
 ```
 
-### 7. Point DNS at CloudFront
+### 5. Point DNS at CloudFront
 
 Add `app CNAME <CloudFrontDomain>` at the registrar, using the `CloudFrontDomain` stack output. Wait for DNS to
 resolve (`dig app.beatrix.co.za`) before continuing.
 
-### 8. Verify
+### 6. Create your account
+
+Self sign-up is off, so create each user yourself. Cognito emails them a temporary password, and they choose their
+own password on first sign-in:
+
+```sh
+aws cognito-idp admin-create-user --region eu-west-1 \
+  --user-pool-id <UserPoolId> \
+  --username you@example.com \
+  --user-attributes Name=email,Value=you@example.com Name=email_verified,Value=true \
+  --desired-delivery-mediums EMAIL
+```
+
+Repeat for anyone else who should have access. To remove someone, `aws cognito-idp admin-delete-user` (or disable
+them in the Cognito console).
+
+### 7. Verify
 
 - `https://app.beatrix.co.za/meals` loads the SPA.
 - `https://app.beatrix.co.za/api/nope` returns a JSON 401, not the SPA.
-- "Sign in with Google" with an allowed account lands on `/log`; any other account sees the not-allowed message.
+- "Sign in" goes to the Cognito login page; signing in with the account from step 6 lands on `/log`.
 - After about 10 minutes idle, Aurora reaches 0 ACU (CloudWatch `ServerlessDatabaseCapacity`); the next request
   shows "Waking up..." and then succeeds.
 - After more than 5 minutes idle, sign in again and confirm the "Waking up..." banner, then success.
 
-### 9. Hand over to CI
+### 8. Hand over to CI
 
 Now merge/push to `main`; CI will deploy and smoke-test `https://app.beatrix.co.za/api/health/db`.
 
 ## Stack outputs (`Gym`)
 
-`CognitoDomain`, `UserPoolId`, `UserPoolClientId`, `GoogleRedirectUri`, `CloudFrontDomain`.
+`CognitoDomain`, `UserPoolId`, `UserPoolClientId`, `CloudFrontDomain`.
 
 ```sh
 aws cloudformation describe-stacks --region eu-west-1 --stack-name Gym \
@@ -156,7 +142,6 @@ aws cloudformation describe-stacks --region eu-west-1 --stack-name Gym \
 ```
 COGNITO_USER_POOL_ID=<UserPoolId>
 COGNITO_CLIENT_ID=<UserPoolClientId>
-ALLOWED_EMAILS=you@example.com
 ```
 
 In production `config.json` is generated at deploy time with `apiBaseUrl` set to `/api`, so do not commit real
@@ -167,4 +152,6 @@ values from the local file.
 - The Cognito user pool has `RemovalPolicy.RETAIN`. Deleting and redeploying `Gym` leaves the old pool holding the
   `gym-beatrix` domain prefix, so the redeploy fails. Delete the old user pool manually first (Cognito console, or
   `aws cognito-idp delete-user-pool-domain` then `delete-user-pool`).
+- Cognito's built-in email sender is limited to a small number of emails per day. That is plenty for invitations
+  and password resets for a handful of users.
 - `GymCi` is deployed manually; CI only deploys `Gym` and `GymCertificate`.

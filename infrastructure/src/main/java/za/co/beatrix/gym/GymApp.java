@@ -24,23 +24,9 @@ public class GymApp {
         CertificateStack certificate =
                 new CertificateStack(app, "GymCertificate", crossRegionProps(account, CERTIFICATE_REGION), DOMAIN);
         new CiStack(app, "GymCi", props(account, REGION), GITHUB_REPO);
-        new GymStack(
-                app,
-                "Gym",
-                crossRegionProps(account, REGION),
-                certificate.getCertificate(),
-                requiredContext(app, "allowedEmails"),
-                requiredContext(app, "googleClientId"));
+        new GymStack(app, "Gym", crossRegionProps(account, REGION), certificate.getCertificate());
 
         app.synth();
-    }
-
-    private static String requiredContext(App app, String key) {
-        Object value = app.getNode().tryGetContext(key);
-        if (value == null || value.toString().isBlank()) {
-            throw new IllegalStateException("Missing required context '" + key + "'; pass it with -c " + key + "=<value>.");
-        }
-        return value.toString();
     }
 
     private static StackProps crossRegionProps(String account, String region) {

@@ -29,17 +29,6 @@ def test_existing_sub_reuses_user(client, make_token, db_session):
     assert db_session.query(User).count() == 1
 
 
-def test_email_allowlist_is_case_insensitive(client, make_token):
-    r = client.get("/api/auth/me", headers=bearer(make_token(email="Owner@Example.COM")))
-    assert r.status_code == 200
-
-
-def test_non_allowlisted_email_forbidden_and_not_stored(client, make_token, db_session):
-    r = client.get("/api/auth/me", headers=bearer(make_token(sub="s2", email="stranger@example.com")))
-    assert r.status_code == 403
-    assert db_session.query(User).count() == 0
-
-
 @pytest.mark.parametrize(
     "override",
     [
@@ -104,16 +93,3 @@ def test_hs256_signed_with_public_key_rejected(client, make_token):
 @pytest.mark.parametrize("claim", ["aud", "exp", "iss"])
 def test_token_missing_required_claim_rejected(client, make_token, claim):
     assert client.get("/api/auth/me", headers=bearer(make_token(drop=[claim]))).status_code == 401
-
-
-@pytest.mark.parametrize(
-    "identities",
-    [None, [], [{"providerName": "Facebook", "userId": "1"}]],
-)
-def test_non_google_identity_forbidden_and_not_stored(client, make_token, db_session, identities):
-    if identities is None:
-        token = make_token(drop=["identities"])
-    else:
-        token = make_token(identities=identities)
-    assert client.get("/api/auth/me", headers=bearer(token)).status_code == 403
-    assert db_session.query(User).count() == 0
