@@ -14,16 +14,10 @@ public class GymStack extends Stack {
 
     private static final List<String> AVAILABILITY_ZONES = List.of(GymApp.REGION + "a", GymApp.REGION + "b");
 
-    public GymStack(
-            Construct scope,
-            String id,
-            StackProps props,
-            ICertificate certificate,
-            String allowedEmails,
-            String googleClientId) {
+    public GymStack(Construct scope, String id, StackProps props, ICertificate certificate) {
         super(scope, id, props);
 
-        Auth auth = new Auth(this, "Auth", new AuthProps(COGNITO_DOMAIN_PREFIX, googleClientId));
+        Auth auth = new Auth(this, "Auth", new AuthProps(COGNITO_DOMAIN_PREFIX));
         Network network = new Network(this, "Network");
         Database database = new Database(this, "Database", network.getVpc());
         BackendService backend = new BackendService(
@@ -33,8 +27,7 @@ public class GymStack extends Stack {
                         network.getVpc(),
                         database,
                         auth.getUserPool().getUserPoolId(),
-                        auth.getClient().getUserPoolClientId(),
-                        allowedEmails));
+                        auth.getClient().getUserPoolClientId()));
         Api api = new Api(this, "Api", new ApiProps(network.getVpc(), backend, auth.getUserPool(), auth.getClient()));
         FrontendHosting frontend =
                 new FrontendHosting(this, "Frontend", new FrontendHostingProps(certificate, api.getHttpApi(), auth));
@@ -49,9 +42,6 @@ public class GymStack extends Stack {
                 .build();
         CfnOutput.Builder.create(this, "UserPoolClientId")
                 .value(auth.getClient().getUserPoolClientId())
-                .build();
-        CfnOutput.Builder.create(this, "GoogleRedirectUri")
-                .value("https://" + cognitoDomain + "/oauth2/idpresponse")
                 .build();
     }
 

@@ -17,7 +17,6 @@ class Settings(BaseSettings):
     cognito_region: str = "eu-west-1"
     cognito_user_pool_id: str = ""
     cognito_client_id: str = ""
-    allowed_emails: str = ""  # comma-separated
     allowed_origins: str = "http://localhost:5173"
 
     @property
@@ -32,10 +31,6 @@ class Settings(BaseSettings):
     @property
     def allowed_origins_list(self) -> list[str]:
         return [origin.strip() for origin in self.allowed_origins.split(",") if origin.strip()]
-
-    @property
-    def allowed_emails_set(self) -> set[str]:
-        return {email.strip().lower() for email in self.allowed_emails.split(",") if email.strip()}
 
 
 settings = Settings()

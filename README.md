@@ -1,7 +1,8 @@
 # Gym & Grocery Tracker
 
-A personal app for logging workouts, planning training, and tracking meals and macros. Sign-in is Google via
-Amazon Cognito, restricted to an email allowlist.
+A personal app for logging workouts, planning training, and tracking meals and macros. It runs entirely on AWS.
+Sign-in is an Amazon Cognito email + password account; self sign-up is off, so only accounts the owner creates
+can get in.
 
 ## Layout
 
@@ -27,7 +28,7 @@ CloudFront (app.beatrix.co.za, ACM cert from us-east-1)
                     v
                   Aurora Serverless v2 (MySQL, scales to 0 ACU)
 
-Sign-in: SPA --> Cognito hosted UI --> Google --> Cognito --> SPA (/auth/callback)
+Sign-in: SPA --> Cognito hosted login (email + password) --> SPA (/auth/callback)
 ```
 
 ## Frontend runtime config
