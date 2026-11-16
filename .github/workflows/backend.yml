@@ -1,0 +1,157 @@
+# Backend release ("docker"): test, build the image, roll it out to ECS. CDK is not involved.
+# Rollback: run this workflow by hand from main with the image-tag of an earlier release.
+name: Backend
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - backend/**
+      - .github/workflows/backend.yml
+      - .github/scripts/smoke-test.sh
+  pull_request:
+    paths:
+      - backend/**
+      - .github/workflows/backend.yml
+      - .github/scripts/smoke-test.sh
+  workflow_dispatch:
+    inputs:
+      image-tag:
+        description: "Roll back to this image tag (a commit SHA already in ECR). Leave empty to release main."
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Backend tests
+    if: inputs.image-tag == ''
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements-dev.txt
+
+      - run: pip install -r requirements-dev.txt
+        working-directory: backend
+
+      - run: pytest
+        working-directory: backend
+
+  deploy:
+    name: Release to ECS
+    needs: test
+    # Runs after the tests pass, or with no tests when rolling back to an existing image.
+    if: ${{ !cancelled() && !failure() && github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    # Shared with the infrastructure workflow: both can change the ECS service.
+    concurrency:
+      group: gym-ecs
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write # GitHub OIDC -> AWS role
+    env:
+      TAG: ${{ inputs.image-tag || github.sha }}
+      ROLLBACK: ${{ inputs.image-tag != '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_BACKEND_ROLE_ARN }}
+          aws-region: eu-west-1
+
+      - name: Read deployment targets
+        id: targets
+        run: |
+          get() { aws ssm get-parameter --name "$1" --query Parameter.Value --output text; }
+          repository_uri=$(get /gym/registry/repository-uri)
+          {
+            echo "repository-uri=$repository_uri"
+            echo "repository-name=${repository_uri#*/}"
+            echo "cluster=$(get /gym/backend/cluster-name)"
+            echo "service=$(get /gym/backend/service-name)"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Check whether the image exists
+        id: image
+        env:
+          REPOSITORY: ${{ steps.targets.outputs.repository-name }}
+        run: |
+          if aws ecr describe-images --repository-name "$REPOSITORY" --image-ids imageTag="$TAG" > /dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          elif [ "$ROLLBACK" = "true" ]; then
+            echo "Image $TAG is not in ECR" >&2
+            exit 1
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Log in to ECR
+        if: steps.image.outputs.exists == 'false'
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push the image
+        if: steps.image.outputs.exists == 'false'
+        run: >
+          docker buildx build --platform linux/amd64
+          -t "${{ steps.targets.outputs.repository-uri }}:$TAG"
+          --push backend
+
+      - name: Copy the running task definition
+        env:
+          CLUSTER: ${{ steps.targets.outputs.cluster }}
+          SERVICE: ${{ steps.targets.outputs.service }}
+        run: |
+          current=$(aws ecs describe-services --cluster "$CLUSTER" --services "$SERVICE" \
+            --query 'services[0].taskDefinition' --output text)
+          aws ecs describe-task-definition --task-definition "$current" --query taskDefinition \
+            | jq 'del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)' \
+            > task-def.json
+
+      - name: Set the new image
+        id: render
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: task-def.json
+          container-name: backend
+          image: ${{ steps.targets.outputs.repository-uri }}:${{ env.TAG }}
+
+      - name: Roll out
+        id: deploy
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition: ${{ steps.render.outputs.task-definition }}
+          cluster: ${{ steps.targets.outputs.cluster }}
+          service: ${{ steps.targets.outputs.service }}
+          wait-for-service-stability: true
+
+      # After a circuit-breaker rollback the service is stable on the OLD revision, so "stable" alone is not success.
+      - name: Check the new revision is the one running
+        env:
+          CLUSTER: ${{ steps.targets.outputs.cluster }}
+          SERVICE: ${{ steps.targets.outputs.service }}
+          EXPECTED: ${{ steps.deploy.outputs.task-definition-arn }}
+        run: |
+          primary=$(aws ecs describe-services --cluster "$CLUSTER" --services "$SERVICE" \
+            --query "services[0].deployments[?status=='PRIMARY'] | [0]")
+          task_definition=$(jq -r .taskDefinition <<< "$primary")
+          rollout_state=$(jq -r .rolloutState <<< "$primary")
+          if [ "$task_definition" != "$EXPECTED" ] || [ "$rollout_state" != "COMPLETED" ]; then
+            echo "Release rolled back by the circuit breaker (running $task_definition, state $rollout_state)" >&2
+            exit 1
+          fi
+
+      # Only now, so the parameter always names an image that is known to work. Infra deploys read it.
+      - name: Record the running image tag
+        run: aws ssm put-parameter --name /gym/backend/image-tag --type String --value "$TAG" --overwrite
+
+      - name: Smoke test
+        run: .github/scripts/smoke-test.sh
