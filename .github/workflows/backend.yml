@@ -85,8 +85,12 @@ jobs:
         env:
           REPOSITORY: ${{ steps.targets.outputs.repository-name }}
         run: |
-          if aws ecr describe-images --repository-name "$REPOSITORY" --image-ids imageTag="$TAG" > /dev/null 2>&1; then
+          if error=$(aws ecr describe-images --repository-name "$REPOSITORY" --image-ids imageTag="$TAG" 2>&1 >/dev/null); then
             echo "exists=true" >> "$GITHUB_OUTPUT"
+          elif ! grep -q ImageNotFoundException <<< "$error"; then
+            # Throttling, AccessDenied and so on: stop with the real error, not a confusing push failure later.
+            echo "$error" >&2
+            exit 1
           elif [ "$ROLLBACK" = "true" ]; then
             echo "Image $TAG is not in ECR" >&2
             exit 1

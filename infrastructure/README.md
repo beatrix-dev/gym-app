@@ -29,7 +29,7 @@ workflow also has a "Run workflow" button (Actions tab).
 | Release | Workflow | Runs on changes to | What it does |
 | --- | --- | --- | --- |
 | `docker` | `.github/workflows/backend.yml` | `backend/**` | Test, build the image, push to ECR, roll out to ECS, smoke test |
-| `app` | `.github/workflows/frontend.yml` | `frontend/**` | Test, build, write `config.json`, upload to S3, clear the CloudFront cache |
+| `app` | `.github/workflows/frontend.yml` | `frontend/**` | Test and build once, then release that build with `.github/scripts/release-frontend.sh`: write `config.json`, upload to S3, clear the CloudFront cache |
 | `infra` | `.github/workflows/infrastructure.yml` | `infrastructure/**` | Test, `cdk diff`, `cdk deploy` every stack except `GymCi`, smoke test |
 
 The backend and infra deploys never run at the same time (concurrency group `gym-ecs`), because both can change
@@ -60,6 +60,8 @@ new code needs new infrastructure (for example, a new environment variable):
   release. It must still be in ECR, which keeps the newest 20 images. List them with
   `aws ecr describe-images --repository-name gym-backend --query 'sort_by(imageDetails,&imagePushedAt)[].imageTags'`.
 - **Frontend:** revert the commit on `main`. The frontend workflow releases the result.
+- **Open browser tabs after a frontend release:** asset files the new build no longer uses are kept for 7 days, so a
+  tab still running the previous release can keep loading its pages.
 
 ### How the backend image tag works
 
@@ -195,20 +197,11 @@ aws cloudformation describe-stacks --stack-name GymFrontend \
 
 ### 8. Upload the frontend
 
-These are the same steps `frontend.yml` runs:
+This is the same script `frontend.yml` runs:
 
 ```sh
-cd ../frontend && npm ci && npm run build
-get() { aws ssm get-parameter --name "$1" --query Parameter.Value --output text; }
-jq -n --arg pool "$(get /gym/auth/user-pool-id)" --arg client "$(get /gym/auth/client-id)" \
-  --arg domain "$(get /gym/auth/cognito-domain)" \
-  '{authority: ("https://cognito-idp.eu-west-1.amazonaws.com/" + $pool),
-    clientId: $client, cognitoDomain: $domain, apiBaseUrl: "/api"}' > dist/config.json
-BUCKET=$(get /gym/frontend/bucket-name)
-aws s3 sync dist/assets "s3://$BUCKET/assets" --cache-control "public,max-age=31536000,immutable"
-aws s3 sync dist "s3://$BUCKET" --exclude "assets/*" --delete --cache-control "no-cache"
-aws s3 sync dist/assets "s3://$BUCKET/assets" --delete
-aws cloudfront create-invalidation --distribution-id "$(get /gym/frontend/distribution-id)" --paths "/*"
+(cd ../frontend && npm ci && npm run build)
+../.github/scripts/release-frontend.sh ../frontend/dist
 ```
 
 ### 9. Create the user accounts
