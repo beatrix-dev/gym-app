@@ -29,12 +29,7 @@ public record GymStacks(
                 app,
                 "GymBackend",
                 props(account, GymApp.REGION, false),
-                new BackendServiceProps(
-                        network.getVpc(),
-                        database.getDatabase(),
-                        auth.getAuth().getUserPool().getUserPoolId(),
-                        auth.getAuth().getClient().getUserPoolClientId(),
-                        registry.getRepository()));
+                new BackendServiceProps(network.getVpc(), database.getDatabase()));
         ApiStack api = new ApiStack(
                 app,
                 "GymApi",

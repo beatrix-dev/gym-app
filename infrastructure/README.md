@@ -12,7 +12,7 @@ All stacks are in `za.co.beatrix.gym`, built by `GymStacks.create`.
 | Stack | Region | Contains | Notes |
 | --- | --- | --- | --- |
 | `GymCertificate` | us-east-1 | ACM certificate for `app.beatrix.co.za` | CloudFront needs us-east-1 |
-| `GymCi` | eu-west-1 | GitHub OIDC provider, the three CI roles | Deployed by hand, never from CI |
+| `GymCi` | eu-west-1 | The three CI roles (uses the account's existing GitHub OIDC provider) | Deployed by hand, never from CI |
 | `GymNetwork` | eu-west-1 | VPC: 2 AZs, no NAT, public and isolated subnets | |
 | `GymDatabase` | eu-west-1 | Aurora MySQL Serverless v2 | Termination protection |
 | `GymAuth` | eu-west-1 | Cognito user pool, app client, hosted domain | Termination protection |
@@ -85,7 +85,8 @@ definition (for example, more memory) keeps the image that is running. CDK never
 
 ## CI roles
 
-Each role trusts only the `main` branch of `beatrix-dev/gym-app`. The stack that owns a resource grants the role
+Each role trusts only the `main` branch of this repo, in GitHub's immutable subject format
+(`repo:beatrix-dev@257955182/gym-app@1314188794:ref:refs/heads/main`). The stack that owns a resource grants the role
 access to it.
 
 | Role | Used by | GitHub variable |
@@ -95,6 +96,12 @@ access to it.
 | `gym-ci-frontend-release` | `frontend.yml` | `AWS_FRONTEND_ROLE_ARN` |
 
 Set the variables in GitHub: Settings → Secrets and variables → Actions → **Variables** (not Secrets).
+
+## Java version
+
+The CDK app needs JDK 21. `cdk.json` runs Maven with `MAVEN_SKIP_RC=true` and JDK 21 (found with
+`/usr/libexec/java_home -v 21` on macOS), so a `~/.mavenrc` that pins another JDK does not break `cdk` commands. On
+Linux it uses `JAVA_HOME`.
 
 ## Local tests
 
@@ -161,8 +168,10 @@ npx aws-cdk@2 deploy GymCi
 Copy the three outputs (`InfraRoleArn`, `BackendReleaseRoleArn`, `FrontendReleaseRoleArn`) into the GitHub
 variables in "CI roles" above. Delete the old `AWS_DEPLOY_ROLE_ARN` variable.
 
-Gotcha: an AWS account allows only one GitHub OIDC provider. If an unused one exists, delete it (IAM → Identity
-providers) or adapt `CiStack` to import it.
+`GymCi` does not create the GitHub OIDC provider. It uses the account's existing
+`oidc-provider/token.actions.githubusercontent.com`, which other repos' roles share (an account allows only one).
+In a new account, create it once first:
+`aws iam create-open-id-connect-provider --url https://token.actions.githubusercontent.com --client-id-list sts.amazonaws.com`.
 
 ### 5. Deploy the registry and push the first image
 

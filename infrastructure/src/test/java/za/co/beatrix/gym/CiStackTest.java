@@ -6,9 +6,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
-import software.amazon.awscdk.App;
-import software.amazon.awscdk.Environment;
-import software.amazon.awscdk.StackProps;
 import software.amazon.awscdk.assertions.Match;
 import software.amazon.awscdk.assertions.Matcher;
 import software.amazon.awscdk.assertions.Template;
@@ -18,19 +15,22 @@ class CiStackTest {
     private static final String ACCOUNT = "123456789012";
     private static final String GYM_PARAMETERS = "arn:aws:ssm:eu-west-1:" + ACCOUNT + ":parameter/gym/*";
 
-    private final Template template = Template.fromStack(new CiStack(
-            new App(),
-            "TestCi",
-            StackProps.builder()
-                    .env(Environment.builder().account(ACCOUNT).region("eu-west-1").build())
-                    .build(),
-            "beatrix-dev/gym-app"));
+    // Built from the real app configuration, so the trusted repository is the one CI actually presents.
+    private final Template template = Template.fromStack(TestStacks.create().ci());
 
     @Test
-    void registersGithubOidcProvider() {
-        template.hasResourceProperties(
-                "AWS::IAM::OIDCProvider",
-                Map.of("Url", "https://token.actions.githubusercontent.com"));
+    void usesTheAccountsExistingGithubOidcProvider() {
+        // An account can have only one provider per URL, and this one is shared with other repos' roles.
+        template.resourceCountIs("AWS::IAM::OIDCProvider", 0);
+        Map<String, Map<String, Object>> trustingExisting = template.findResources(
+                "AWS::IAM::Role",
+                Match.objectLike(Map.of("Properties", Match.objectLike(Map.of(
+                        "AssumeRolePolicyDocument",
+                        Match.objectLike(Map.of("Statement", List.of(Match.objectLike(Map.of(
+                                "Principal",
+                                Map.of("Federated", "arn:aws:iam::" + ACCOUNT
+                                        + ":oidc-provider/token.actions.githubusercontent.com")))))))))));
+        assertEquals(3, trustingExisting.size());
     }
 
     @Test
@@ -44,7 +44,7 @@ class CiStackTest {
     @Test
     void everyRoleTrustsOnlyMainBranchOfRepo() {
         Map<String, Object> conditions = Map.of(
-                "token.actions.githubusercontent.com:sub", "repo:beatrix-dev/gym-app:ref:refs/heads/main",
+                "token.actions.githubusercontent.com:sub", "repo:beatrix-dev@257955182/gym-app@1314188794:ref:refs/heads/main",
                 "token.actions.githubusercontent.com:aud", "sts.amazonaws.com");
         Map<String, Object> statement = Map.of(
                 "Action", "sts:AssumeRoleWithWebIdentity",
@@ -80,12 +80,7 @@ class CiStackTest {
                         Map.of(
                                 "Action", List.of("ssm:GetParameter", "ssm:GetParameters"),
                                 "Effect", "Allow",
-                                "Resource", GYM_PARAMETERS),
-                        Map.of(
-                                "Action", "ssm:PutParameter",
-                                "Effect", "Allow",
-                                "Resource",
-                                "arn:aws:ssm:eu-west-1:" + ACCOUNT + ":parameter/gym/backend/image-tag")))));
+                                "Resource", GYM_PARAMETERS)))));
     }
 
     @Test

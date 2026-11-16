@@ -1,0 +1,30 @@
+{
+  "family": "gym-backend",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "256",
+  "memory": "512",
+  "runtimePlatform": { "cpuArchitecture": "X86_64", "operatingSystemFamily": "LINUX" },
+  "containerDefinitions": [
+    {
+      "name": "backend",
+      "essential": true,
+      "portMappings": [{ "containerPort": 8100, "protocol": "tcp" }],
+      "healthCheck": {
+        "command": ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8100/api/health')"],
+        "interval": 30,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 60
+      },
+      "environment": [
+        { "name": "DB_NAME", "value": "gym_tracker" },
+        { "name": "COGNITO_REGION", "value": "eu-west-1" }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": { "awslogs-region": "eu-west-1", "awslogs-stream-prefix": "backend" }
+      }
+    }
+  ]
+}
