@@ -35,6 +35,10 @@ workflow also has a "Run workflow" button (Actions tab).
 The backend and infra deploys never run at the same time (concurrency group `gym-ecs`), because both can change
 the ECS service.
 
+GitHub keeps only one *waiting* job per group. If a deploy is running and two more are queued behind it, the older
+waiting one is **cancelled**. So when a Backend or Infrastructure run shows "cancelled", re-run it (Actions → the
+run → Re-run jobs), or the change on `main` is not deployed.
+
 ### Adding an API
 
 - **A new endpoint** (for example `POST /api/workouts`): add it in FastAPI. It ships as a backend release.
@@ -116,7 +120,8 @@ aws cloudformation wait stack-delete-complete --stack-name Gym
 
 ### 2. Rebuild only: clean up what it leaves behind
 
-The old user pool is retained, and it still holds the `gym-beatrix` domain prefix that `GymAuth` needs:
+The old user pool is retained. Delete it so the `gym-beatrix` domain prefix is free for `GymAuth`. The stack
+delete usually removes the domain already; if `delete-user-pool-domain` says the domain does not exist, go on:
 
 ```sh
 aws cognito-idp list-user-pools --max-results 20                      # find the old pool ID
@@ -165,7 +170,7 @@ npx aws-cdk@2 deploy GymRegistry
 REPO=$(aws ssm get-parameter --name /gym/registry/repository-uri --query Parameter.Value --output text)
 TAG=$(git rev-parse HEAD)
 aws ecr get-login-password | docker login --username AWS --password-stdin "${REPO%%/*}"
-docker buildx build --platform linux/amd64 -t "$REPO:$TAG" --push ../backend
+docker buildx build --platform linux/amd64 --provenance=false --sbom=false -t "$REPO:$TAG" --push ../backend
 aws ssm put-parameter --name /gym/backend/image-tag --type String --value "$TAG" --overwrite
 ```
 

@@ -102,6 +102,7 @@ jobs:
         if: steps.image.outputs.exists == 'false'
         run: >
           docker buildx build --platform linux/amd64
+          --provenance=false --sbom=false
           -t "${{ steps.targets.outputs.repository-uri }}:$TAG"
           --push backend
 
@@ -149,9 +150,9 @@ jobs:
             exit 1
           fi
 
+      - name: Smoke test
+        run: .github/scripts/smoke-test.sh
+
       # Only now, so the parameter always names an image that is known to work. Infra deploys read it.
       - name: Record the running image tag
         run: aws ssm put-parameter --name /gym/backend/image-tag --type String --value "$TAG" --overwrite
-
-      - name: Smoke test
-        run: .github/scripts/smoke-test.sh
