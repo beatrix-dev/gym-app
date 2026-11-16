@@ -6,9 +6,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
-import software.amazon.awscdk.App;
-import software.amazon.awscdk.Environment;
-import software.amazon.awscdk.StackProps;
 import software.amazon.awscdk.assertions.Match;
 import software.amazon.awscdk.assertions.Matcher;
 import software.amazon.awscdk.assertions.Template;
@@ -18,13 +15,8 @@ class CiStackTest {
     private static final String ACCOUNT = "123456789012";
     private static final String GYM_PARAMETERS = "arn:aws:ssm:eu-west-1:" + ACCOUNT + ":parameter/gym/*";
 
-    private final Template template = Template.fromStack(new CiStack(
-            new App(),
-            "TestCi",
-            StackProps.builder()
-                    .env(Environment.builder().account(ACCOUNT).region("eu-west-1").build())
-                    .build(),
-            "beatrix-dev/gym-app"));
+    // Built from the real app configuration, so the trusted repository is the one CI actually presents.
+    private final Template template = Template.fromStack(TestStacks.create().ci());
 
     @Test
     void registersGithubOidcProvider() {
@@ -44,7 +36,7 @@ class CiStackTest {
     @Test
     void everyRoleTrustsOnlyMainBranchOfRepo() {
         Map<String, Object> conditions = Map.of(
-                "token.actions.githubusercontent.com:sub", "repo:beatrix-dev/gym-app:ref:refs/heads/main",
+                "token.actions.githubusercontent.com:sub", "repo:beatrix-dev@257955182/gym-app@1314188794:ref:refs/heads/main",
                 "token.actions.githubusercontent.com:aud", "sts.amazonaws.com");
         Map<String, Object> statement = Map.of(
                 "Action", "sts:AssumeRoleWithWebIdentity",

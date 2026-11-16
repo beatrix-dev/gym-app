@@ -85,7 +85,8 @@ definition (for example, more memory) keeps the image that is running. CDK never
 
 ## CI roles
 
-Each role trusts only the `main` branch of `beatrix-dev/gym-app`. The stack that owns a resource grants the role
+Each role trusts only the `main` branch of this repo, in GitHub's immutable subject format
+(`repo:beatrix-dev@257955182/gym-app@1314188794:ref:refs/heads/main`). The stack that owns a resource grants the role
 access to it.
 
 | Role | Used by | GitHub variable |
