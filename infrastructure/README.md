@@ -97,6 +97,12 @@ access to it.
 
 Set the variables in GitHub: Settings → Secrets and variables → Actions → **Variables** (not Secrets).
 
+## Java version
+
+The CDK app needs JDK 21. `cdk.json` runs Maven with `MAVEN_SKIP_RC=true` and JDK 21 (found with
+`/usr/libexec/java_home -v 21` on macOS), so a `~/.mavenrc` that pins another JDK does not break `cdk` commands. On
+Linux it uses `JAVA_HOME`.
+
 ## Local tests
 
 Needs JDK 21 and Node. It does not need Docker or a frontend build.
