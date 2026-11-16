@@ -36,7 +36,7 @@ public class Api extends Construct {
                 .build();
 
         HttpServiceDiscoveryIntegration integration = HttpServiceDiscoveryIntegration.Builder.create(
-                        "Backend", props.backend().getService().getCloudMapService())
+                        "Backend", props.backend().getCloudMapService())
                 .vpcLink(vpcLink)
                 .build();
 

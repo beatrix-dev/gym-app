@@ -80,12 +80,7 @@ class CiStackTest {
                         Map.of(
                                 "Action", List.of("ssm:GetParameter", "ssm:GetParameters"),
                                 "Effect", "Allow",
-                                "Resource", GYM_PARAMETERS),
-                        Map.of(
-                                "Action", "ssm:PutParameter",
-                                "Effect", "Allow",
-                                "Resource",
-                                "arn:aws:ssm:eu-west-1:" + ACCOUNT + ":parameter/gym/backend/image-tag")))));
+                                "Resource", GYM_PARAMETERS)))));
     }
 
     @Test

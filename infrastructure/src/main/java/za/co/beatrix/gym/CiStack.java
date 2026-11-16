@@ -39,9 +39,6 @@ public class CiStack extends Stack {
         backend.addToPolicy(allow(List.of("ecr:GetAuthorizationToken"), "*"));
         backend.addToPolicy(allow(List.of("ecs:DescribeTaskDefinition", "ecs:RegisterTaskDefinition"), "*"));
         backend.addToPolicy(readGymParameters);
-        backend.addToPolicy(allow(
-                List.of("ssm:PutParameter"),
-                "arn:aws:ssm:" + getRegion() + ":" + getAccount() + ":parameter" + SsmNames.IMAGE_TAG));
 
         Role frontend = githubRole("FrontendReleaseRole", FRONTEND_RELEASE_ROLE, provider, githubRepo);
         frontend.addToPolicy(readGymParameters);
