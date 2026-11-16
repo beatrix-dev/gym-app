@@ -44,7 +44,9 @@ public class BackendStack extends Stack {
         parameter("LogGroupNameParameter", SsmNames.LOG_GROUP_NAME, backend.getLogGroup().getLogGroupName());
         parameter("DbSecretArnParameter", SsmNames.DB_SECRET_ARN, backendProps.database().getSecret().getSecretArn());
 
-        IRole releaseRole = Role.fromRoleName(this, "BackendReleaseRole", CiStack.BACKEND_RELEASE_ROLE);
+        // The id must differ from GymRegistry's import of the same role: CDK names the inline policy after it, and
+        // IAM allows one policy per name per role.
+        IRole releaseRole = Role.fromRoleName(this, "EcsReleaseRole", CiStack.BACKEND_RELEASE_ROLE);
         releaseRole.addToPrincipalPolicy(PolicyStatement.Builder.create()
                 .actions(List.of("ecs:CreateService", "ecs:DescribeServices", "ecs:UpdateService"))
                 .resources(List.of("arn:aws:ecs:" + getRegion() + ":" + getAccount() + ":service/"
