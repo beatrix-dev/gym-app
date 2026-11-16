@@ -5,7 +5,6 @@ import java.util.Map;
 import software.amazon.awscdk.CfnOutput;
 import software.amazon.awscdk.Stack;
 import software.amazon.awscdk.StackProps;
-import software.amazon.awscdk.services.iam.OidcProviderNative;
 import software.amazon.awscdk.services.iam.PolicyStatement;
 import software.amazon.awscdk.services.iam.Role;
 import software.amazon.awscdk.services.iam.WebIdentityPrincipal;
@@ -13,7 +12,8 @@ import software.constructs.Construct;
 
 /**
  * GitHub Actions assumes one of three roles through OIDC, one per release type. Only the main branch may assume
- * them. The roles have fixed names so the resource stacks can grant them access to their own resources; this stack
+ * them. The account's GitHub OIDC provider already exists and is shared with other repos' roles (an account can
+ * have only one per URL), so this stack references it instead of creating it. The roles have fixed names so the resource stacks can grant them access to their own resources; this stack
  * holds only the permissions that are not tied to one resource.
  */
 public class CiStack extends Stack {
@@ -27,10 +27,7 @@ public class CiStack extends Stack {
     public CiStack(Construct scope, String id, StackProps props, String githubRepo) {
         super(scope, id, props);
 
-        OidcProviderNative provider = OidcProviderNative.Builder.create(this, "GithubOidc")
-                .url("https://" + GITHUB_OIDC_HOST)
-                .clientIds(List.of("sts.amazonaws.com"))
-                .build();
+        String provider = "arn:aws:iam::" + getAccount() + ":oidc-provider/" + GITHUB_OIDC_HOST;
 
         String gymParameters = "arn:aws:ssm:" + getRegion() + ":" + getAccount() + ":parameter" + SsmNames.PREFIX + "*";
         PolicyStatement readGymParameters = allow(List.of("ssm:GetParameter", "ssm:GetParameters"), gymParameters);
@@ -54,11 +51,11 @@ public class CiStack extends Stack {
         CfnOutput.Builder.create(this, "FrontendReleaseRoleArn").value(frontend.getRoleArn()).build();
     }
 
-    private Role githubRole(String id, String name, OidcProviderNative provider, String githubRepo) {
+    private Role githubRole(String id, String name, String providerArn, String githubRepo) {
         return Role.Builder.create(this, id)
                 .roleName(name)
                 .assumedBy(new WebIdentityPrincipal(
-                        provider.getOidcProviderArn(),
+                        providerArn,
                         Map.of("StringEquals", Map.of(
                                 GITHUB_OIDC_HOST + ":sub", "repo:" + githubRepo + ":ref:refs/heads/main",
                                 GITHUB_OIDC_HOST + ":aud", "sts.amazonaws.com"))))

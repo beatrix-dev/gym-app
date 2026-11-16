@@ -19,10 +19,18 @@ class CiStackTest {
     private final Template template = Template.fromStack(TestStacks.create().ci());
 
     @Test
-    void registersGithubOidcProvider() {
-        template.hasResourceProperties(
-                "AWS::IAM::OIDCProvider",
-                Map.of("Url", "https://token.actions.githubusercontent.com"));
+    void usesTheAccountsExistingGithubOidcProvider() {
+        // An account can have only one provider per URL, and this one is shared with other repos' roles.
+        template.resourceCountIs("AWS::IAM::OIDCProvider", 0);
+        Map<String, Map<String, Object>> trustingExisting = template.findResources(
+                "AWS::IAM::Role",
+                Match.objectLike(Map.of("Properties", Match.objectLike(Map.of(
+                        "AssumeRolePolicyDocument",
+                        Match.objectLike(Map.of("Statement", List.of(Match.objectLike(Map.of(
+                                "Principal",
+                                Map.of("Federated", "arn:aws:iam::" + ACCOUNT
+                                        + ":oidc-provider/token.actions.githubusercontent.com")))))))))));
+        assertEquals(3, trustingExisting.size());
     }
 
     @Test
