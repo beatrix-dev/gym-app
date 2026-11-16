@@ -29,6 +29,10 @@ public class FrontendStack extends Stack {
                 .parameterName(SsmNames.DISTRIBUTION_ID)
                 .stringValue(hosting.getDistribution().getDistributionId())
                 .build();
+        StringParameter.Builder.create(this, "DomainNameParameter")
+                .parameterName(SsmNames.DOMAIN_NAME)
+                .stringValue(hosting.getDistribution().getDistributionDomainName())
+                .build();
 
         // The registrar's CNAME for the app domain points here; it changes whenever the distribution is replaced.
         CfnOutput.Builder.create(this, "CloudFrontDomain")

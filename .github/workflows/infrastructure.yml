@@ -8,12 +8,10 @@ on:
     paths:
       - infrastructure/**
       - .github/workflows/infrastructure.yml
-      - .github/scripts/smoke-test.sh
   pull_request:
     paths:
       - infrastructure/**
       - .github/workflows/infrastructure.yml
-      - .github/scripts/smoke-test.sh
   workflow_dispatch:
 
 permissions:
@@ -82,6 +80,3 @@ jobs:
       # Stacks without changes are skipped.
       - name: Deploy
         run: npx aws-cdk@2 deploy $STACKS --require-approval never
-
-      - name: Smoke test
-        run: ../.github/scripts/smoke-test.sh

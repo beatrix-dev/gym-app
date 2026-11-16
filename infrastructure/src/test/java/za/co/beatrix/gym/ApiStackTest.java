@@ -44,4 +44,10 @@ class ApiStackTest {
         // Only the database rule lives in the backend stack.
         Template.fromStack(stacks.backend()).resourceCountIs("AWS::EC2::SecurityGroupIngress", 1);
     }
+
+    @Test
+    void publishesTheApiUrlForSmokeTests() {
+        template.hasResourceProperties(
+                "AWS::SSM::Parameter", Match.objectLike(Map.of("Name", "/gym/api/url")));
+    }
 }

@@ -3,6 +3,7 @@ package za.co.beatrix.gym;
 import software.amazon.awscdk.Stack;
 import software.amazon.awscdk.StackProps;
 import software.amazon.awscdk.services.apigatewayv2.HttpApi;
+import software.amazon.awscdk.services.ssm.StringParameter;
 import software.constructs.Construct;
 
 /**
@@ -16,6 +17,11 @@ public class ApiStack extends Stack {
     public ApiStack(Construct scope, String id, StackProps props, ApiProps apiProps) {
         super(scope, id, props);
         this.api = new Api(this, "Api", apiProps);
+        // Smoke tests call the API directly, so they work before (or without) the app domain's DNS.
+        StringParameter.Builder.create(this, "ApiUrlParameter")
+                .parameterName(SsmNames.API_URL)
+                .stringValue(api.getHttpApi().getApiEndpoint())
+                .build();
     }
 
     public HttpApi getHttpApi() {

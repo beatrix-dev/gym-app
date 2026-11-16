@@ -16,6 +16,8 @@ final class SsmNames {
     static final String DB_SECRET_ARN = PREFIX + "backend/db-secret-arn";
     static final String BUCKET_NAME = PREFIX + "frontend/bucket-name";
     static final String DISTRIBUTION_ID = PREFIX + "frontend/distribution-id";
+    static final String DOMAIN_NAME = PREFIX + "frontend/domain-name";
+    static final String API_URL = PREFIX + "api/url";
     static final String USER_POOL_ID = PREFIX + "auth/user-pool-id";
     static final String CLIENT_ID = PREFIX + "auth/client-id";
     static final String COGNITO_DOMAIN = PREFIX + "auth/cognito-domain";
