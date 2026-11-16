@@ -64,6 +64,8 @@ class FrontendStackTest {
                 "AWS::SSM::Parameter", Match.objectLike(Map.of("Name", "/gym/frontend/bucket-name")));
         template.hasResourceProperties(
                 "AWS::SSM::Parameter", Match.objectLike(Map.of("Name", "/gym/frontend/distribution-id")));
+        template.hasResourceProperties(
+                "AWS::SSM::Parameter", Match.objectLike(Map.of("Name", "/gym/frontend/domain-name")));
     }
 
     @Test

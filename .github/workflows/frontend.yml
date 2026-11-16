@@ -76,5 +76,8 @@ jobs:
       - name: Release
         run: .github/scripts/release-frontend.sh frontend/dist
 
+      # Through the CloudFront domain, so it works before the app domain's DNS points here.
       - name: Check the site serves its config
-        run: curl -sf https://app.beatrix.co.za/config.json
+        run: |
+          domain=$(aws ssm get-parameter --name /gym/frontend/domain-name --query Parameter.Value --output text)
+          curl -sf "https://$domain/config.json"
