@@ -6,8 +6,6 @@ import software.amazon.awscdk.Duration;
 import software.amazon.awscdk.services.ec2.ISecurityGroup;
 import software.amazon.awscdk.services.ec2.SecurityGroup;
 import software.amazon.awscdk.services.ec2.SubnetSelection;
-import software.amazon.awscdk.services.ecr.assets.Platform;
-import software.amazon.awscdk.services.ecs.AssetImageProps;
 import software.amazon.awscdk.services.ecs.AwsLogDriverProps;
 import software.amazon.awscdk.services.ecs.CloudMapOptions;
 import software.amazon.awscdk.services.ecs.Cluster;
@@ -25,9 +23,14 @@ import software.amazon.awscdk.services.ecs.Secret;
 import software.amazon.awscdk.services.logs.RetentionDays;
 import software.amazon.awscdk.services.servicediscovery.DnsRecordType;
 import software.amazon.awscdk.services.servicediscovery.PrivateDnsNamespace;
+import software.amazon.awscdk.services.ssm.StringParameter;
 import software.constructs.Construct;
 
-/** The FastAPI backend on Fargate, registered in Cloud Map so API Gateway can reach it without a load balancer. */
+/**
+ * The FastAPI backend on Fargate, registered in Cloud Map so API Gateway can reach it without a load balancer. The
+ * image is not built here: the backend release workflow pushes it and records its tag in {@link SsmNames#IMAGE_TAG},
+ * which CloudFormation reads at deploy time, so an infra deploy keeps the image that is running.
+ */
 public class BackendService extends Construct {
 
     static final int PORT = 8100;
@@ -57,9 +60,8 @@ public class BackendService extends Construct {
                 .build();
 
         taskDefinition.addContainer("backend", ContainerDefinitionOptions.builder()
-                .image(ContainerImage.fromAsset(
-                        "../backend",
-                        AssetImageProps.builder().platform(Platform.LINUX_AMD64).build()))
+                .image(ContainerImage.fromEcrRepository(
+                        props.repository(), StringParameter.valueForStringParameter(this, SsmNames.IMAGE_TAG)))
                 .portMappings(List.of(PortMapping.builder().containerPort(PORT).build()))
                 .logging(LogDriver.awsLogs(AwsLogDriverProps.builder()
                         .streamPrefix("backend")
@@ -114,7 +116,9 @@ public class BackendService extends Construct {
         // of the cluster construct) exists; depending on the secret alone only waits for the cluster.
         service.getNode().addDependency(props.database().getCluster());
 
-        props.database().getCluster().getConnections().allowDefaultPortFrom(securityGroup);
+        // Created from this side so the rule lives in this construct's stack; the other way round would make the
+        // database stack depend on the backend stack, which already depends on it.
+        securityGroup.getConnections().allowToDefaultPort(props.database().getCluster());
     }
 
     public FargateService getService() {

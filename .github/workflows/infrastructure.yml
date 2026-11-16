@@ -1,0 +1,86 @@
+# Infrastructure release ("infra"): test and deploy the CDK stacks. App code ships from backend.yml and frontend.yml.
+# GymCi (the OIDC provider and the CI roles) is deployed by hand, never from here.
+name: Infrastructure
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - infrastructure/**
+      - .github/workflows/infrastructure.yml
+      - .github/scripts/smoke-test.sh
+  pull_request:
+    paths:
+      - infrastructure/**
+      - .github/workflows/infrastructure.yml
+      - .github/scripts/smoke-test.sh
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  STACKS: GymCertificate GymNetwork GymDatabase GymAuth GymRegistry GymBackend GymApi GymFrontend
+
+jobs:
+  test:
+    name: Infrastructure tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 25
+
+      - run: mvn -B test
+        working-directory: infrastructure
+
+  deploy:
+    name: Deploy with CDK
+    needs: test
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    # Shared with the backend workflow: both can change the ECS service.
+    concurrency:
+      group: gym-ecs
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write # GitHub OIDC -> AWS role
+    defaults:
+      run:
+        working-directory: infrastructure
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 25
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_INFRA_ROLE_ARN }}
+          aws-region: eu-west-1
+
+      - name: Show changes
+        run: npx aws-cdk@2 diff $STACKS
+
+      # Stacks without changes are skipped.
+      - name: Deploy
+        run: npx aws-cdk@2 deploy $STACKS --require-approval never
+
+      - name: Smoke test
+        run: ../.github/scripts/smoke-test.sh

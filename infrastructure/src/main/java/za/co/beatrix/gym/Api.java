@@ -24,8 +24,10 @@ public class Api extends Construct {
                 .vpc(props.vpc())
                 .description("API Gateway VPC Link")
                 .build();
-        props.backend().getSecurityGroup().addIngressRule(
-                vpcLinkSecurityGroup, Port.tcp(BackendService.PORT), "API Gateway VPC Link");
+        // Created from this side so the rule lives in this construct's stack and the backend stack does not
+        // depend on the API stack, which already depends on it.
+        vpcLinkSecurityGroup.getConnections().allowTo(
+                props.backend().getSecurityGroup(), Port.tcp(BackendService.PORT), "API Gateway VPC Link");
 
         VpcLink vpcLink = VpcLink.Builder.create(this, "VpcLink")
                 .vpc(props.vpc())

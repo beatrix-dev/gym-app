@@ -1,0 +1,80 @@
+# Frontend release ("app"): test, build, upload to S3, clear the CloudFront cache. CDK is not involved.
+name: Frontend
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - frontend/**
+      - .github/workflows/frontend.yml
+      - .github/scripts/release-frontend.sh
+  pull_request:
+    paths:
+      - frontend/**
+      - .github/workflows/frontend.yml
+      - .github/scripts/release-frontend.sh
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Frontend typecheck, build, test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 25
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - run: npm ci
+        working-directory: frontend
+
+      - name: Typecheck + build
+        run: npm run build
+        working-directory: frontend
+
+      - name: Test
+        run: npm run test
+        working-directory: frontend
+
+      # The deploy job releases exactly this tested build.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist
+          retention-days: 7
+
+  deploy:
+    name: Release to S3 and CloudFront
+    needs: test
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: gym-frontend
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write # GitHub OIDC -> AWS role
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_FRONTEND_ROLE_ARN }}
+          aws-region: eu-west-1
+
+      - name: Release
+        run: .github/scripts/release-frontend.sh frontend/dist
+
+      - name: Check the site serves its config
+        run: curl -sf https://app.beatrix.co.za/config.json
