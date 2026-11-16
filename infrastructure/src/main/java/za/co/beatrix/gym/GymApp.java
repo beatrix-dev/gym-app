@@ -1,8 +1,6 @@
 package za.co.beatrix.gym;
 
 import software.amazon.awscdk.App;
-import software.amazon.awscdk.Environment;
-import software.amazon.awscdk.StackProps;
 
 public class GymApp {
 
@@ -20,25 +18,7 @@ public class GymApp {
         }
 
         App app = new App();
-
-        CertificateStack certificate =
-                new CertificateStack(app, "GymCertificate", crossRegionProps(account, CERTIFICATE_REGION), DOMAIN);
-        new CiStack(app, "GymCi", props(account, REGION), GITHUB_REPO);
-        new GymStack(app, "Gym", crossRegionProps(account, REGION), certificate.getCertificate());
-
+        GymStacks.create(app, account);
         app.synth();
-    }
-
-    private static StackProps crossRegionProps(String account, String region) {
-        return StackProps.builder()
-                .env(Environment.builder().account(account).region(region).build())
-                .crossRegionReferences(true)
-                .build();
-    }
-
-    private static StackProps props(String account, String region) {
-        return StackProps.builder()
-                .env(Environment.builder().account(account).region(region).build())
-                .build();
     }
 }
