@@ -47,12 +47,17 @@ pip install -r requirements-dev.txt && pytest
 # Frontend (from frontend/)
 npm ci && npm run build && npm run test
 
-# Infrastructure (from infrastructure/, needs frontend/dist and JDK 21)
+# Infrastructure (from infrastructure/, needs JDK 21 and Node)
 mvn -B test
 ```
 
 ## Deployment
 
-Pushing to `main` runs `.github/workflows/deploy.yml`: backend, frontend and infrastructure tests, then
-`cdk deploy Gym GymCertificate` using a GitHub OIDC role, then a smoke test against `/api/health/db`. The one-time
-bootstrap is in [infrastructure/README.md](infrastructure/README.md).
+Each part releases on its own when its folder changes on `main`:
+
+- `backend/` → `.github/workflows/backend.yml` builds the image and rolls it out to ECS.
+- `frontend/` → `.github/workflows/frontend.yml` uploads the build to S3 and clears the CloudFront cache.
+- `infrastructure/` → `.github/workflows/infrastructure.yml` deploys the CDK stacks.
+
+The stacks, rollback, adding an API, and the one-time first deploy are in
+[infrastructure/README.md](infrastructure/README.md).

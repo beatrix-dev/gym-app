@@ -67,6 +67,15 @@ class FrontendStackTest {
     }
 
     @Test
+    void outputsCloudFrontDomainForTheDnsRecord() {
+        template.hasOutput(
+                "CloudFrontDomain",
+                Match.objectLike(Map.of(
+                        "Value",
+                        Map.of("Fn::GetAtt", List.of(Match.stringLikeRegexp("^FrontendDistribution"), "DomainName")))));
+    }
+
+    @Test
     void grantsReleaseRoleUploadAndInvalidation() {
         Map<String, Map<String, Object>> policies = template.findResources(
                 "AWS::IAM::Policy",

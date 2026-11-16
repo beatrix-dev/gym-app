@@ -1,5 +1,6 @@
 package za.co.beatrix.gym;
 
+import software.amazon.awscdk.CfnOutput;
 import software.amazon.awscdk.Stack;
 import software.amazon.awscdk.StackProps;
 import software.amazon.awscdk.services.cloudfront.Distribution;
@@ -27,6 +28,11 @@ public class FrontendStack extends Stack {
         StringParameter.Builder.create(this, "DistributionIdParameter")
                 .parameterName(SsmNames.DISTRIBUTION_ID)
                 .stringValue(hosting.getDistribution().getDistributionId())
+                .build();
+
+        // The registrar's CNAME for the app domain points here; it changes whenever the distribution is replaced.
+        CfnOutput.Builder.create(this, "CloudFrontDomain")
+                .value(hosting.getDistribution().getDistributionDomainName())
                 .build();
 
         IRole releaseRole = Role.fromRoleName(this, "FrontendReleaseRole", CiStack.FRONTEND_RELEASE_ROLE);
