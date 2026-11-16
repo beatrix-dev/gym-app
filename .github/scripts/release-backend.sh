@@ -76,13 +76,23 @@ rm -f service.rendered.json
 echo "Waiting for the service to become stable"
 aws ecs wait services-stable --cluster "$cluster" --services "$service"
 
-# After a circuit-breaker rollback the service is stable on the OLD revision, so "stable" alone is not success.
-primary=$(aws ecs describe-services --cluster "$cluster" --services "$service" \
-  --query "services[0].deployments[?status=='PRIMARY'] | [0]")
-running=$(jq -r .taskDefinition <<< "$primary")
-rollout=$(jq -r .rolloutState <<< "$primary")
-if [ "$running" != "$task_definition" ] || [ "$rollout" != "COMPLETED" ]; then
-  echo "Release rolled back by the circuit breaker (running $running, state $rollout)" >&2
+# "Stable" is not success: it can return while ECS still reports the rollout IN_PROGRESS, and after a
+# circuit-breaker rollback the service is stable on the OLD revision. Wait for the rollout's final state.
+for _ in $(seq 1 60); do
+  primary=$(aws ecs describe-services --cluster "$cluster" --services "$service" \
+    --query "services[0].deployments[?status=='PRIMARY'] | [0]")
+  running=$(jq -r .taskDefinition <<< "$primary")
+  rollout=$(jq -r .rolloutState <<< "$primary")
+  if [ "$rollout" = "COMPLETED" ] || [ "$rollout" = "FAILED" ]; then
+    break
+  fi
+  sleep 10
+done
+if [ "$running" != "$task_definition" ]; then
+  echo "Release rolled back by the circuit breaker: the service runs $running" >&2
+  exit 1
+elif [ "$rollout" != "COMPLETED" ]; then
+  echo "Release did not complete: rollout state is $rollout" >&2
   exit 1
 fi
 echo "Released $image"
