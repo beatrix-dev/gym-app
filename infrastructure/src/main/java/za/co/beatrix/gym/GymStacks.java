@@ -10,7 +10,8 @@ public record GymStacks(
         CiStack ci,
         NetworkStack network,
         DatabaseStack database,
-        AuthStack auth) {
+        AuthStack auth,
+        RegistryStack registry) {
 
     public static GymStacks create(App app, String account) {
         CertificateStack certificate = new CertificateStack(
@@ -20,7 +21,8 @@ public record GymStacks(
         DatabaseStack database =
                 new DatabaseStack(app, "GymDatabase", props(account, GymApp.REGION, true), network.getVpc());
         AuthStack auth = new AuthStack(app, "GymAuth", props(account, GymApp.REGION, true));
-        return new GymStacks(certificate, ci, network, database, auth);
+        RegistryStack registry = new RegistryStack(app, "GymRegistry", props(account, GymApp.REGION, false));
+        return new GymStacks(certificate, ci, network, database, auth, registry);
     }
 
     private static StackProps props(String account, String region, boolean terminationProtection) {
