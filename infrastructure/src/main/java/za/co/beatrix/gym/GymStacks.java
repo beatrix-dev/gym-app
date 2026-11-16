@@ -13,7 +13,8 @@ public record GymStacks(
         AuthStack auth,
         RegistryStack registry,
         BackendStack backend,
-        ApiStack api) {
+        ApiStack api,
+        FrontendStack frontend) {
 
     public static GymStacks create(App app, String account) {
         CertificateStack certificate = new CertificateStack(
@@ -43,7 +44,12 @@ public record GymStacks(
                         backend.getBackend(),
                         auth.getAuth().getUserPool(),
                         auth.getAuth().getClient()));
-        return new GymStacks(certificate, ci, network, database, auth, registry, backend, api);
+        FrontendStack frontend = new FrontendStack(
+                app,
+                "GymFrontend",
+                props(account, GymApp.REGION, false),
+                new FrontendHostingProps(certificate.getCertificate(), api.getHttpApi()));
+        return new GymStacks(certificate, ci, network, database, auth, registry, backend, api, frontend);
     }
 
     private static StackProps props(String account, String region, boolean terminationProtection) {

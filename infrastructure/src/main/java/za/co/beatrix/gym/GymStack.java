@@ -32,7 +32,7 @@ public class GymStack extends Stack {
                                 this, "Repository", RegistryStack.REPOSITORY_NAME)));
         Api api = new Api(this, "Api", new ApiProps(network.getVpc(), backend, auth.getUserPool(), auth.getClient()));
         FrontendHosting frontend =
-                new FrontendHosting(this, "Frontend", new FrontendHostingProps(certificate, api.getHttpApi(), auth));
+                new FrontendHosting(this, "Frontend", new FrontendHostingProps(certificate, api.getHttpApi()));
 
         String cognitoDomain = COGNITO_DOMAIN_PREFIX + ".auth." + GymApp.REGION + ".amazoncognito.com";
         CfnOutput.Builder.create(this, "CognitoDomain").value(cognitoDomain).build();

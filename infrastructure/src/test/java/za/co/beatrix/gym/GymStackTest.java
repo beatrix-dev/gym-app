@@ -252,21 +252,4 @@ class GymStackTest {
                                 "FunctionAssociations", Match.absent()))))))));
         template.resourceCountIs("AWS::CloudFront::Function", 1);
     }
-
-    @Test
-    void onlyGeneratedConfigJsonIsDeployed() throws IOException {
-        template.hasResourceProperties(
-                "Custom::CDKBucketDeployment",
-                Match.objectLike(Map.of(
-                        "SourceObjectKeys", Match.arrayEquals(List.of(Match.anyValue(), Match.anyValue())),
-                        "DistributionPaths", List.of("/*"))));
-        // The generated config.json is a second, inline source; the staged dist asset must not also carry one.
-        try (Stream<Path> assets = Files.list(outDir)) {
-            List<Path> distAssets = assets.filter(p -> p.getFileName().toString().startsWith("asset.")
-                            && Files.isRegularFile(p.resolve("index.html")))
-                    .toList();
-            assertEquals(1, distAssets.size());
-            assertFalse(Files.exists(distAssets.get(0).resolve("config.json")));
-        }
-    }
 }
