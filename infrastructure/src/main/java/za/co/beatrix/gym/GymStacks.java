@@ -12,7 +12,8 @@ public record GymStacks(
         DatabaseStack database,
         AuthStack auth,
         RegistryStack registry,
-        BackendStack backend) {
+        BackendStack backend,
+        ApiStack api) {
 
     public static GymStacks create(App app, String account) {
         CertificateStack certificate = new CertificateStack(
@@ -33,7 +34,16 @@ public record GymStacks(
                         auth.getAuth().getUserPool().getUserPoolId(),
                         auth.getAuth().getClient().getUserPoolClientId(),
                         registry.getRepository()));
-        return new GymStacks(certificate, ci, network, database, auth, registry, backend);
+        ApiStack api = new ApiStack(
+                app,
+                "GymApi",
+                props(account, GymApp.REGION, false),
+                new ApiProps(
+                        network.getVpc(),
+                        backend.getBackend(),
+                        auth.getAuth().getUserPool(),
+                        auth.getAuth().getClient()));
+        return new GymStacks(certificate, ci, network, database, auth, registry, backend, api);
     }
 
     private static StackProps props(String account, String region, boolean terminationProtection) {
