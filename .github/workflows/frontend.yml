@@ -1,0 +1,110 @@
+# Frontend release ("app"): test, build, upload to S3, clear the CloudFront cache. CDK is not involved.
+name: Frontend
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - frontend/**
+      - .github/workflows/frontend.yml
+  pull_request:
+    paths:
+      - frontend/**
+      - .github/workflows/frontend.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Frontend typecheck, build, test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 25
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - run: npm ci
+        working-directory: frontend
+
+      - name: Typecheck + build
+        run: npm run build
+        working-directory: frontend
+
+      - name: Test
+        run: npm run test
+        working-directory: frontend
+
+  deploy:
+    name: Release to S3 and CloudFront
+    needs: test
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: gym-frontend
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write # GitHub OIDC -> AWS role
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 25
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - run: npm ci
+
+      - run: npm run build
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_FRONTEND_ROLE_ARN }}
+          aws-region: eu-west-1
+
+      - name: Read deployment targets
+        id: targets
+        run: |
+          get() { aws ssm get-parameter --name "$1" --query Parameter.Value --output text; }
+          {
+            echo "bucket=$(get /gym/frontend/bucket-name)"
+            echo "distribution=$(get /gym/frontend/distribution-id)"
+          } >> "$GITHUB_OUTPUT"
+
+          # Replaces the local-dev config.json that Vite copies from public/.
+          jq -n \
+            --arg pool "$(get /gym/auth/user-pool-id)" \
+            --arg client "$(get /gym/auth/client-id)" \
+            --arg domain "$(get /gym/auth/cognito-domain)" \
+            '{authority: ("https://cognito-idp.eu-west-1.amazonaws.com/" + $pool),
+              clientId: $client, cognitoDomain: $domain, apiBaseUrl: "/api"}' \
+            > dist/config.json
+
+      # Order matters for users loading the page during the upload: new assets first, then the files that point at
+      # them, and old assets last, so every index.html that can be served still finds its assets.
+      - name: Upload
+        env:
+          BUCKET: ${{ steps.targets.outputs.bucket }}
+        run: |
+          aws s3 sync dist/assets "s3://$BUCKET/assets" --cache-control "public,max-age=31536000,immutable"
+          aws s3 sync dist "s3://$BUCKET" --exclude "assets/*" --delete --cache-control "no-cache"
+          aws s3 sync dist/assets "s3://$BUCKET/assets" --delete
+
+      - name: Clear the CloudFront cache
+        run: >
+          aws cloudfront create-invalidation
+          --distribution-id "${{ steps.targets.outputs.distribution }}"
+          --paths "/*"
+
+      - name: Check the site serves its config
+        run: curl -sf https://app.beatrix.co.za/config.json
