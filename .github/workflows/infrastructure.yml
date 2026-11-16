@@ -47,9 +47,10 @@ jobs:
     needs: test
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    # Shared with the backend workflow: both can change the ECS service.
+    # One deploy of this kind at a time. Infra never touches the ECS service (the backend release owns it), so the
+    # backend and infra workflows do not need to wait for each other.
     concurrency:
-      group: gym-ecs
+      group: gym-infrastructure
       cancel-in-progress: false
     permissions:
       contents: read

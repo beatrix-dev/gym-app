@@ -1,0 +1,9 @@
+{
+  "serviceName": "backend",
+  "desiredCount": 1,
+  "deploymentConfiguration": {
+    "minimumHealthyPercent": 100,
+    "maximumPercent": 200,
+    "deploymentCircuitBreaker": { "enable": true, "rollback": true }
+  }
+}
