@@ -27,7 +27,9 @@ public class GymStack extends Stack {
                         network.getVpc(),
                         database,
                         auth.getUserPool().getUserPoolId(),
-                        auth.getClient().getUserPoolClientId()));
+                        auth.getClient().getUserPoolClientId(),
+                        software.amazon.awscdk.services.ecr.Repository.fromRepositoryName(
+                                this, "Repository", RegistryStack.REPOSITORY_NAME)));
         Api api = new Api(this, "Api", new ApiProps(network.getVpc(), backend, auth.getUserPool(), auth.getClient()));
         FrontendHosting frontend =
                 new FrontendHosting(this, "Frontend", new FrontendHostingProps(certificate, api.getHttpApi(), auth));
